@@ -1,0 +1,120 @@
+7II foo FUNCTION
+Inserted in ScopeTable# 1 at position 4, 0
+II i VAR
+Inserted in ScopeTable# 1 at position 0, 0
+LL foo
+Found in ScopeTable# 1 at position 4, 0
+LL j
+Not found
+II 5 NUMBER
+Inserted in ScopeTable# 1 at position 4, 1
+PP A
+ScopeTable# 1
+0->< i : VAR >
+1->
+2->
+3->
+4->< foo : FUNCTION >< 5 : NUMBER >
+5->
+6->
+
+DD foo
+Found in ScopeTable# 1 at position 4, 0
+Deleted entry at 4, 0 in the current ScopeTable
+PP A
+ScopeTable# 1
+0->< i : VAR >
+1->
+2->
+3->
+4->< 5 : NUMBER >
+5->
+6->
+
+DD j
+Not found
+DD i
+Found in ScopeTable# 1 at position 0, 0
+Deleted entry at 0, 0 in the current ScopeTable
+PP A
+ScopeTable# 1
+0->
+1->
+2->
+3->
+4->< 5 : NUMBER >
+5->
+6->
+
+SS
+New ScopeTable with id# 1.1 is created
+II <= RELOP
+Inserted in ScopeTable# 1.1 at position 6, 0
+II == RELOP
+Inserted in ScopeTable# 1.1 at position 1, 0
+PP A
+ScopeTable# 1.1
+0->
+1->< == : RELOP >
+2->
+3->
+4->
+5->
+6->< <= : RELOP >
+
+ScopeTable# 1
+0->
+1->
+2->
+3->
+4->< 5 : NUMBER >
+5->
+6->
+
+II <= RELOP
+< <= : RELOP > already exists in the currentScopeTable
+II foo FUNCTION
+Inserted in ScopeTable# 1.1 at position 4, 0
+DD ==
+Found in ScopeTable# 1.1 at position 1, 0
+Deleted entry at 1, 0 in the current ScopeTable
+PP A
+ScopeTable# 1.1
+0->
+1->
+2->
+3->
+4->< foo : FUNCTION >
+5->
+6->< <= : RELOP >
+
+ScopeTable# 1
+0->
+1->
+2->
+3->
+4->< 5 : NUMBER >
+5->
+6->
+
+EE
+ScopeTable with id# 1.1 removed
+II t t
+Inserted in ScopeTable# 1 at position 4, 1
+II k k
+Inserted in ScopeTable# 1 at position 2, 0
+PP A
+ScopeTable# 1
+0->
+1->
+2->< k : k >
+3->
+4->< 5 : NUMBER >< t : t >
+5->
+6->
+
+EE
+ScopeTable with id# 1 removed
+EE
+II A A
+Inserted in ScopeTable# 2 at position 2, 0
