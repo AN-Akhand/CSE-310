@@ -130,7 +130,7 @@ SEMICOLON ";"
 CONST_INT {DIGITS}
 DECIMAL ({DIGIT}*[\.]{DIGIT}+)
 CONST_FLOAT {DECIMAL}|(({DECIMAL}|{DIGITS})[Ee][+-]?{DIGITS})
-ILL_FORMED_NUM_ERROR {DECIMAL}|(({DECIMAL}|{DIGITS})[Ee][+-]?{DECIMAL})
+ILL_FORMED_NUM_ERROR (({DECIMAL}|{DIGITS})[Ee][+-]?{DECIMAL})
 TOO_MANY_DEC_POINT_ERROR ({DECIMAL}[\.]+({DECIMAL}|{DIGITS}))+
 
 ESCAPE_SEQUENCE \\[nt\\\'\"afrbv0]
@@ -332,6 +332,7 @@ ALL_ASCII_CHAR [ -~]
 {WHITESPACE} { }
 
 . {
+	errorCount++;
 	cout << "Error at line no " << yylineno << ": Unrecognized character " << yytext << endl << endl;
 }
 
