@@ -1293,12 +1293,13 @@ case YY_STATE_EOF(STRING_STATE):
 	errorCount++;
 	cout << "Error at line no " << yylineno << ": Unterminated String " << ostr << endl << endl;
 	BEGIN INITIAL;
+	return 0;
 }
 	YY_BREAK
 case 33:
 /* rule 33 can match eol */
 YY_RULE_SETUP
-#line 321 "1805089.l"
+#line 322 "1805089.l"
 {
 	errorCount++;
 	cout << "Error at line no " << yylineno << ": Unterminated String " << ostr << endl << endl;
@@ -1307,7 +1308,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 34:
 YY_RULE_SETUP
-#line 326 "1805089.l"
+#line 327 "1805089.l"
 {
 	tokenout << "<" << "STRING, \"" << str << "\"> ";
 	cout<<"Line no " << yylineno << ": Token <STRING> LEXEME \"" << ostr << "\" found " << "--> <STRING, \"" << str <<"\">"<< endl << endl;
@@ -1316,7 +1317,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 35:
 YY_RULE_SETUP
-#line 331 "1805089.l"
+#line 332 "1805089.l"
 {
 	str.append(yytext);
 	ostr.append(yytext);
@@ -1325,17 +1326,17 @@ YY_RULE_SETUP
 case 36:
 /* rule 36 can match eol */
 YY_RULE_SETUP
-#line 335 "1805089.l"
+#line 336 "1805089.l"
 { }
 	YY_BREAK
 case 37:
 YY_RULE_SETUP
-#line 337 "1805089.l"
+#line 338 "1805089.l"
 { }
 	YY_BREAK
 case 38:
 YY_RULE_SETUP
-#line 339 "1805089.l"
+#line 340 "1805089.l"
 {
 	errorCount++;
 	cout << "Error at line no " << yylineno << ": Unrecognized character " << yytext << endl << endl;
@@ -1343,10 +1344,10 @@ YY_RULE_SETUP
 	YY_BREAK
 case 39:
 YY_RULE_SETUP
-#line 344 "1805089.l"
+#line 345 "1805089.l"
 ECHO;
 	YY_BREAK
-#line 1350 "lex.yy.c"
+#line 1351 "lex.yy.c"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(CHAR_STATE):
 	yyterminate();
@@ -2364,7 +2365,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 344 "1805089.l"
+#line 345 "1805089.l"
 
 
 int main(int argc,char *argv[]){

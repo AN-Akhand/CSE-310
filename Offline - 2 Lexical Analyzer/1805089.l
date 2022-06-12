@@ -317,6 +317,7 @@ ALL_ASCII_CHAR [ -~]
 	errorCount++;
 	cout << "Error at line no " << yylineno << ": Unterminated String " << ostr << endl << endl;
 	BEGIN INITIAL;
+	return 0;
 }
 <STRING_STATE>\n {
 	errorCount++;
