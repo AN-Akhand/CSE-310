@@ -313,6 +313,11 @@ ALL_ASCII_CHAR [ -~]
 	cout << "Error at line no " << yylineno << ": Unknown escape sequence in String " << ostr << endl << endl;
 	BEGIN INITIAL;
 }
+<STRING_STATE><<EOF>> {
+	errorCount++;
+	cout << "Error at line no " << yylineno << ": Unterminated String " << ostr << endl << endl;
+	BEGIN INITIAL;
+}
 <STRING_STATE>\n {
 	errorCount++;
 	cout << "Error at line no " << yylineno << ": Unterminated String " << ostr << endl << endl;
