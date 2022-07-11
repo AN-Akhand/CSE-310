@@ -1,23 +1,42 @@
 #include<iostream>
 #include<fstream>
+#include<vector>
 
 using namespace std;
 
 class SymbolInfo{
     string name;
     string type;
+    string idType;
     SymbolInfo* nextSymbol;
+    int size;
+    vector<SymbolInfo*>* paramList;
 public:
     SymbolInfo(){
         name = "";
         type = "";
+        idType = "";
         nextSymbol = nullptr;
+        size = -1;
+        paramList = nullptr;
     }
 
     SymbolInfo(string name, string type, SymbolInfo* nextSymbol = nullptr){
         this->name = name;
         this->type = type;
         this->nextSymbol = nextSymbol;
+        size = -1;
+        idType = type;
+        paramList = nullptr;
+    }
+
+    SymbolInfo(string name, string type, string idType){
+        this->name = name;
+        this->type = type;
+        this->nextSymbol = nextSymbol;
+        size = -1;
+        this->idType = idType;
+        paramList = nullptr;
     }
 
     string getName(){
@@ -28,8 +47,24 @@ public:
         return type;
     }
 
+    string getIdType(){
+        return idType;
+    }
+
+    vector<SymbolInfo*>* getParamList(){
+        return paramList;
+    }
+
+    int getSize(){
+        return size;
+    }
+
     SymbolInfo* getNextSymbol(){
         return nextSymbol;
+    }
+
+    void setParamList(vector<SymbolInfo*>* paramList){
+        this->paramList = paramList;
     }
 
     void setName(string name){
@@ -38,6 +73,14 @@ public:
 
     void setType(string type){
         this->type = type;
+    }
+
+    void setIdType(string idType){
+        this->idType = idType;
+    }
+
+    void setSize(int size){
+        this->size = size;
     }
 
     void setNextSymbol(SymbolInfo* nextSymbol){
@@ -81,6 +124,36 @@ public:
         hashTable = new SymbolInfo*[size];
         for(int i = 0; i < size; i++){
             hashTable[i] = new SymbolInfo();
+        }
+
+    }
+
+    bool insert(SymbolInfo* sInfo){
+        string name = sInfo->getName();
+        int index = hash(name);
+
+
+        SymbolInfo* root = hashTable[index];
+
+        if(root->getName() == ""){
+            *root = *sInfo;
+            return true;
+        }
+        else{
+            SymbolInfo* parent;
+            int i = 0;
+            do{
+                if(root->getName() == name){
+                    return false;
+                }
+                parent = root;
+                root = root->getNextSymbol();
+                i++;
+            }while(root != nullptr);
+            root = sInfo;
+            parent->setNextSymbol(root);
+
+            return true;
         }
 
     }
@@ -163,7 +236,7 @@ public:
     }
 
     void print(){
-        cout<<"ScopeTable# " << id << endl;
+        cout<<"\n\nScopeTable# " << id << endl;
 
         for(int i = 0; i < size; i++){
             SymbolInfo* root = hashTable[i];
@@ -178,7 +251,7 @@ public:
             }while(root != nullptr);
             cout << endl;
         }
-        cout << endl;
+        cout << "\n";
     }
 
     int getSize(){
@@ -283,6 +356,13 @@ public:
         return currentScope->insert(name, type);
     }
 
+    bool insert(SymbolInfo* sInfo){
+        if(currentScope == nullptr){
+            enterScope();
+        }
+        return currentScope->insert(sInfo);
+    }
+
     bool remove(string name){
         return currentScope->deleteSymbol(name);
     }
@@ -307,11 +387,11 @@ public:
 
     void printAllScopeTable(){
         ScopeTable* temp = currentScope;
-
         while(temp != nullptr){
             temp->print();
             temp = temp->getParentScope();
         }
+        cout <<  endl;
     }
 
     ~SymbolTable(){

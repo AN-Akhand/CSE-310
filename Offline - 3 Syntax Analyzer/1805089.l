@@ -1,12 +1,18 @@
 %option noyywrap yylineno
 %x STRING_STATE
-%x CHAR_STATE
+%x MUL_COMMENT_STATE
+%x COMMENT_STATE
 %{
     #include <iostream>
-    #include "SymbolTable.cpp"
 	#include <string>
 	#include <fstream>
 	#include <algorithm>
+	#include "SymbolTable.cpp"
+	#include "y.tab.h"
+	using namespace std;
+
+
+	extern YYSTYPE yylval;
 
 	char processEscapeSequence(string str){
 		if(str == "\\n"){
@@ -22,7 +28,6 @@
 			return '\a';
 		}
 		else if(str == "\\f"){
-			cout << "BLEHf" << endl << endl;
 			return '\f';
 		}
 		else if(str == "\\b"){
@@ -88,15 +93,76 @@
 		return '\0';
 	}
 
-    SymbolTable *symbolTable = new SymbolTable(7);
+	int returnSymbolTokens(string s){
+		string* symbol = new string[1];
+		symbol[0] = s;
+		if(symbol[0] == "if"){
+			return IF;
+		}
+		else if(symbol[0] == "else"){
+			return ELSE;
+		}
+		else if(symbol[0] == "for"){
+			return FOR;
+		}
+		else if(symbol[0] == "while"){
+			return WHILE;
+		}
+		else if(symbol[0] == "do"){
+			return DO;
+		}
+		else if(symbol[0] == "int"){
+			yylval.type = symbol;
+			return INT;
+		}
+		else if(symbol[0] == "float"){
+			yylval.type = symbol;
+			return FLOAT;
+		}
+		else if(symbol[0] == "double"){
+			yylval.type = symbol;
+			return DOUBLE;
+		}
+		else if(symbol[0] == "char"){
+			yylval.type = symbol;
+			return CHAR;
+		}
+		else if(symbol[0] == "void"){
+			yylval.type = symbol;
+			return VOID;
+		}
+		else if(symbol[0] == "switch"){
+			return SWITCH;
+		}
+		else if(symbol[0] == "default"){
+			return DEFAULT;
+		}
+		else if(symbol[0] == "break"){
+			return BREAK;
+		}
+		else if(symbol[0] == "return"){
+			return RETURN;
+		}
+		else if(symbol[0] == "case"){
+			return CASE;
+		}
+		else if(symbol[0] == "continue"){
+			return CONTINUE;
+		}
+		else if(symbol[0] == "printf"){
+			return PRINTLN;
+		}
+	}
+
 	string str;
 	string ostr;
-	int errorCount = 0;
+	extern int errorCount;
 	ofstream tokenout;
+	int origLine;
 
 %}
 
-NEWLINE \n|\n\r|\r\n
+NEWLINE [\r]?[\n]
 WHITESPACE [ \t\f\r\v]+ 
 
 LETTER [a-zA-Z]
@@ -104,13 +170,14 @@ DIGIT [0-9]
 DIGITS {DIGIT}+
 IDENTIFIER_INIT {LETTER}|_
 
-KEYWORDS "if"|"for"|"do"|"int"|"float"|"void"|"switch"|"default"|"else"|"while"|"break"|"char"|"double"|"return"|"case"|"continue"
+KEYWORDS "if"|"for"|"do"|"int"|"float"|"void"|"switch"|"default"|"else"|"while"|"break"|"char"|"double"|"return"|"case"|"continue"|"printf"
 
 ALPHANUM [a-zA-Z0-9]
 
 ADDOP [-+]
 MULOP [\*\%\/]
-INCOP "++"|"--"
+INCOP "++"
+DECOP "--"
 RELOP "<"|"<="|"=="|"!="|">="|">"
 ASSIGNOP "="
 LOGICOP "||"|"&&"
@@ -127,9 +194,6 @@ RTHIRD "]"
 COMMA ","
 SEMICOLON ";"
 
-IDENTIFIER {IDENTIFIER_INIT}{ALPHANUM}*
-INVALID_IDENTIFIER {DIGITS}{ALPHANUM}*
-
 CONST_INT {DIGITS}
 DECIMAL ({DIGIT}*[\.]{DIGIT}+)
 CONST_FLOAT {DECIMAL}|(({DECIMAL}|{DIGITS})[Ee][+-]?{DIGITS})
@@ -139,235 +203,201 @@ TOO_MANY_DEC_POINT_ERROR ({DECIMAL}[\.]+({DECIMAL}|{DIGITS}))+
 ESCAPE_SEQUENCE \\[nt\\\'\"afrbv0]
 ESCAPE_SEQUENCE_CHAR [nt\\\'\"afrbv0]
 
-CONST_CHAR \'{ESCAPE_SEQUENCE}\'|\'[^\\\'\n]\'
-UNFINISHED_CHAR \'[^\'\n]*|\'\\\'
+CONST_CHAR \'{ESCAPE_SEQUENCE}\'|\'[^\\\'{NEWLINE}]\'
+UNFINISHED_CHAR \'[^\'{NEWLINE}]*|\'\\\'
 EMPTY_CHAR \'\'
-MUL_CHAR_CONST \'({ESCAPE_SEQUENCE}|[^\\\'\n])+\'
+MUL_CHAR_CONST \'({ESCAPE_SEQUENCE}|[^\\\'{NEWLINE}])+\'
 
+IDENTIFIER {IDENTIFIER_INIT}({ALPHANUM}|_)*
+INVALID_IDENTIFIER {DIGITS}{ALPHANUM}*
 
-STRING \"([^\\\n]|{ESCAPE_SEQUENCE}|\\\n)*\"
-
-COMMENT (\/\*([^\*]|[\r\n]|(\*+([^\*\/]|[\r\n])))*\*+\/)|(\/\/([^\n]|\\\n)*)
-UNFINISHED_COMMENT \/\*([^\*]|[\*]+[^*/])*
-ALL_ASCII_CHAR [ -~]
 
 %%
 
 {KEYWORDS} {
-	string s(yytext);
-	transform(s.begin(), s.end(), s.begin(), ::toupper);
-	tokenout << "<" << s << "> ";
-	cout<<"Line no " << yylineno << ": Token <"<< s <<"> LEXEME " << yytext << " found"<<endl << endl;
-	}
+	return returnSymbolTokens(yytext);
+}
 {MULOP} {
-	tokenout << "<" << "MULOP, " << yytext << "> "; 
-	cout<<"Line no " << yylineno << ": Token <MULOP> LEXEME " << yytext << " found"<<endl << endl;
+	string* symbol = new string[1];
+	symbol[0] = yytext;
+	yylval.type = symbol;
+	return MULOP;
 }
 {ADDOP} {
-	tokenout << "<" << "ADDOP, " << yytext << "> "; 
-	cout<<"Line no " << yylineno << ": Token <ADDOP> LEXEME " << yytext << " found"<<endl << endl;
+	string* symbol = new string[1];
+	symbol[0] = yytext;
+	yylval.type = symbol;
+	return ADDOP;
 }
 {INCOP} {
-	tokenout << "<" << "INCOP, " << yytext << "> "; 
-	cout<<"Line no " << yylineno << ": Token <INCOP> LEXEME " << yytext << " found"<<endl << endl;
+	return INCOP;
+}
+{DECOP} {
+	return DECOP;
 }
 {RELOP} {
-	tokenout << "<" << "RELOP, " << yytext << "> ";
-	cout<<"Line no " << yylineno << ": Token <RELOP> LEXEME " << yytext << " found"<<endl << endl;
+	string* symbol = new string[1];
+	symbol[0] = yytext;
+	yylval.type = symbol;
+	return RELOP;
 }
 {ASSIGNOP} {
-	tokenout << "<" << "ASSIGNOP, " << yytext << "> ";
-	cout<<"Line no " << yylineno << ": Token <ASSIGNOP> LEXEME " << yytext << " found"<<endl << endl;
+	return ASSIGNOP;
 }
 {LOGICOP} {
-	tokenout << "<" << "LOGICOP, " << yytext << "> ";
-	cout<<"Line no " << yylineno << ": Token <LOGICOP> LEXEME " << yytext << " found"<<endl << endl;
+	string* symbol = new string[1];
+	symbol[0] = yytext;
+	yylval.type = symbol;
+	return LOGICOP;
 }
 {NOT} {
-	tokenout << "<" << "NOT, " << yytext << "> ";
-	cout<<"Line no " << yylineno << ": Token <LOGIC> LEXEME " << yytext << " found"<<endl << endl;
+	return NOT;
 }
 {LPAREN} {
-	tokenout << "<" << "LPAREN, " << yytext << "> ";
-	cout<<"Line no " << yylineno << ": Token <LPAREN> LEXEME " << yytext << " found"<<endl << endl;
+	return LPAREN;
 }
 {RPAREN} {
-	tokenout << "<" << "RPAREN, " << yytext << "> ";
-	cout<<"Line no " << yylineno << ": Token <RPAREN> LEXEME " << yytext << " found"<<endl << endl;
+	return RPAREN;
 }
 {LCURL} {
-	tokenout << "<" << "LCURL, " << yytext << "> ";
-	cout<<"Line no " << yylineno << ": Token <LCURL> LEXEME " << yytext << " found"<<endl << endl;
-	symbolTable->enterScope();
+	return LCURL;
 }
 {RCURL} {
-	tokenout << "<" << "RCURL, " << yytext << "> ";
-	cout<<"Line no " << yylineno << ": Token <RCURL> LEXEME " << yytext << " found"<<endl << endl;
-	symbolTable->exitScope();
+	return RCURL;
 }
 {LTHIRD} {
-	tokenout << "<" << "LTHIRD, " << yytext << "> ";
-	cout<<"Line no " << yylineno << ": Token <LTHIRD> LEXEME " << yytext << " found"<<endl << endl;
+	return LTHIRD;
 }
 {RTHIRD} {
-	tokenout << "<" << "RTHIRD, " << yytext << "> ";
-	cout<<"Line no " << yylineno << ": Token <RTHIRD> LEXEME " << yytext << " found"<<endl << endl;
+	return RTHIRD;
 }
 {COMMA} {
-	tokenout << "<" << "COMMA, " << yytext << "> ";
-	cout<<"Line no " << yylineno << ": Token <COMMA> LEXEME " << yytext << " found"<<endl << endl;
+	return COMMA;
 }
 {SEMICOLON} {
-	tokenout << "<" << "SEMICOLON, " << yytext << "> ";
-	cout<<"Line no " << yylineno << ": Token <SEMICOLON> LEXEME " << yytext << " found"<<endl << endl;
+	return SEMICOLON;
 }
 {CONST_INT} {
-	tokenout << "<" << "CONST_INT, " << yytext << "> ";
-	cout<<"Line no " << yylineno << ": Token <CONST_INT> LEXEME " << yytext << " found"<<endl << endl;
-	if(symbolTable->insert(yytext, "CONST_INT")){
-		symbolTable->printAllScopeTable();
-	}
-	else{
-		cout << yytext << " already exists in scopetable"<< endl << endl;
-	}
+	SymbolInfo* sInfo = new SymbolInfo(yytext, "int");
+	yylval.symbolInfo = sInfo;
+	return CONST_INT;
 }
 {CONST_FLOAT} {
-	tokenout << "<" << "CONST_FLOAT, " << yytext << "> ";
-	cout<<"Line no " << yylineno << ": Token <CONST_FLOAT> LEXEME " << yytext << " found"<<endl << endl;
-	if(symbolTable->insert(yytext, "CONST_FLOAT")){
-		symbolTable->printAllScopeTable();
-	}
-	else{
-		cout << yytext << " already exists in scopetable"<< endl << endl;
-	}
+	SymbolInfo* sInfo = new SymbolInfo(yytext, "float");
+	yylval.symbolInfo = sInfo;
+	return CONST_FLOAT;
 }
 {TOO_MANY_DEC_POINT_ERROR} {
-	errorCount++;
-	cout << "Error at line no " << yylineno << ": Too many decimal points " << yytext << endl << endl;
+	//errorCount++;
+	//cout << "Error at line no " << yylineno << ": Too many decimal points " << yytext << endl << endl;
 }
 {ILL_FORMED_NUM_ERROR} {
-	errorCount++;
-	cout << "Error at line no " << yylineno << ": Ill formed number " << yytext << endl << endl;
+	//errorCount++;
+	//cout << "Error at line no " << yylineno << ": Ill formed number " << yytext << endl << endl;
 }
 {IDENTIFIER} {
-	tokenout << "<" << "ID, " << yytext << "> ";
-	cout<<"Line no " << yylineno << ": Token <ID> LEXEME " << yytext << " found"<<endl << endl;
-	if(symbolTable->insert(yytext, "ID")){
-		symbolTable->printAllScopeTable();
-	}
-	else{
-		cout << yytext << " already exists in scopetable"<< endl << endl;
-	}
+	SymbolInfo* sInfo = new SymbolInfo(yytext, "ID");
+	yylval.symbolInfo = sInfo;
+	return ID;
 
 }
 {INVALID_IDENTIFIER} {
-	errorCount++;
-	cout << "Error at line no " << yylineno << ": Invalid prefix on ID or invalid suffix on Number " << yytext << endl << endl;
+	//errorCount++;
+	//cout << "Error at line no " << yylineno << ": Invalid prefix on ID or invalid suffix on Number " << yytext << endl << endl;
 }
 {CONST_CHAR} {
 	char ch = processEscapeSequenceInChar(yytext);
-	tokenout << "<" << "CONST_CHAR, " << ch << "> ";
-	cout<<"Line no " << yylineno << ": Token <CONST_CHAR> LEXEME " << yytext << " found -->" << "<CHAR_CONST, " << ch << ">" <<endl << endl;
 	string temp(1, ch);
-	if(symbolTable->insert(yytext, "CONST_CHAR")){
-		symbolTable->printAllScopeTable();
-	}
-	else{
-		cout << yytext << " already exists in scopetable"<< endl << endl;
-	}
+	SymbolInfo* sInfo = new SymbolInfo(temp, "char");
+	yylval.symbolInfo = sInfo;
+	return CONST_CHAR;
 }
 {EMPTY_CHAR} {
-	errorCount++;
-	cout << "Error at line no " << yylineno << ": Empty character constant error " << yytext << endl << endl;
+	//errorCount++;
+	//cout << "Error at line no " << yylineno << ": Empty character constant error " << yytext << endl << endl;
  }
 {MUL_CHAR_CONST} {
-	errorCount++;
-	cout << "Error at line no " << yylineno << ":Multi character constant error " << yytext << endl << endl;
+	//errorCount++;
+	//cout << "Error at line no " << yylineno << ":Multi character constant error " << yytext << endl << endl;
 }
 {UNFINISHED_CHAR} {
-	errorCount++;
-	cout << "Error at line no " << yylineno << ": Unterminated character " << yytext << endl << endl;
+	//errorCount++;
+	//cout << "Error at line no " << yylineno << ": Unterminated character " << yytext << endl << endl;
 }
-{COMMENT} {
-	cout<<"Line no " << yylineno << ": Token <COMMENT> LEXEME " << yytext << " found"<<endl << endl;
+
+\/\/ {
+	origLine = yylineno;
+	BEGIN COMMENT_STATE;
 }
-{UNFINISHED_COMMENT} {
-	errorCount++;
-	cout << "Error at line no " << yylineno << ": Unterminated Comment " << yytext << endl << endl;
+
+<COMMENT_STATE>([^{NEWLINE}]|\\{NEWLINE})* {
+	//cout<<"Line no " << origLine << ": Token <COMMENT> LEXEME //" << yytext << " found"<<endl << endl;
+	BEGIN INITIAL;
+}
+
+\/\* {
+	origLine = yylineno;
+	BEGIN MUL_COMMENT_STATE;
+}
+
+<MUL_COMMENT_STATE>([^\*]|[\r{NEWLINE}]|(\*+([^\*\/]|[\r{NEWLINE}])))*\*+\/ {
+	//cout<<"Line no " << origLine << ": Token <COMMENT> LEXEME /*" << yytext << " found"<<endl << endl;
+	BEGIN INITIAL;
+}
+
+<MUL_COMMENT_STATE>([^\*]|[\*]+[^*/])* {
+	//errorCount++;
+	//cout << "Error at line no " << origLine << ": Unterminated Comment " << yytext << endl << endl;
+	BEGIN INITIAL;
+	return 0;
 }
 
 \" {
 	str = "";
 	ostr = "";
+	origLine = yylineno;
 	BEGIN STRING_STATE;
 }
 <STRING_STATE>{ESCAPE_SEQUENCE} {
 	str.push_back(processEscapeSequence(yytext));
 	ostr.append(yytext);
 }
-<STRING_STATE>\\\n {
+<STRING_STATE>\\{NEWLINE} {
 	ostr.append(yytext);
 }
 <STRING_STATE>\\[^{ESCAPE_SEQUENCE_CHAR}] {
 	ostr.append(yytext);
-	errorCount++;
-	cout << "Error at line no " << yylineno << ": Unknown escape sequence in String " << ostr << endl << endl;
+	//errorCount++;
+	//cout << "Error at line no " << origLine << ": Unknown escape sequence in String " << ostr << endl << endl;
 	BEGIN INITIAL;
 }
 <STRING_STATE><<EOF>> {
-	errorCount++;
-	cout << "Error at line no " << yylineno << ": Unterminated String " << ostr << endl << endl;
+	//errorCount++;
+	//cout << "Error at line no " << origLine << ": Unterminated String " << ostr << endl << endl;
 	BEGIN INITIAL;
 	return 0;
 }
-<STRING_STATE>\n {
-	errorCount++;
-	cout << "Error at line no " << yylineno << ": Unterminated String " << ostr << endl << endl;
+<STRING_STATE>{NEWLINE} {
+	//errorCount++;
+	//cout << "Error at line no " << origLine << ": Unterminated String " << ostr << endl << endl;
 	BEGIN INITIAL;
 }
 <STRING_STATE>\" {
-	tokenout << "<" << "STRING, \"" << str << "\"> ";
-	cout<<"Line no " << yylineno << ": Token <STRING> LEXEME \"" << ostr << "\" found " << "--> <STRING, \"" << str <<"\">"<< endl << endl;
+	//tokenout << "<" << "STRING, \"" << str << "\"> ";
+	//cout<<"Line no " << origLine << ": Token <STRING> LEXEME \"" << ostr << "\" found " << "--> <STRING, \"" << str <<"\">"<< endl << endl;
 	BEGIN INITIAL;
 }
 <STRING_STATE>. {
 	str.append(yytext);
 	ostr.append(yytext);
 }
-\n { }
+{NEWLINE} { }
 
 {WHITESPACE} { }
 
 . {
-	errorCount++;
-	cout << "Error at line no " << yylineno << ": Unrecognized character " << yytext << endl << endl;
+	//errorCount++;
+	//cout << "Error at line no " << yylineno << ": Unrecognized character " << yytext << endl << endl;
 }
 
 %%
-
-int main(int argc,char *argv[]){
-	
-	if(argc!=2){
-		printf("Please provide input file name and try again\n");
-		return 0;
-	}
-	
-	FILE *fin=fopen(argv[1],"r");
-	if(fin==NULL){
-		printf("Cannot open specified file\n");
-		return 0;
-	}
-	
-	tokenout.open("1805089_token.txt");
-	freopen("1805089_log.txt", "w", stdout);
-	cout<<endl;
-	yyin= fin;
-	yylex();
-	fclose(yyin);
-	symbolTable->printAllScopeTable();
-	delete symbolTable;
-	cout << "Total lines: " << yylineno << endl;
-	cout << "Total errors: " << errorCount << endl;
-	tokenout.close();
-	return 0;
-}

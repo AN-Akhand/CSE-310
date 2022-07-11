@@ -1,6 +1,7 @@
 %option noyywrap yylineno
 %x STRING_STATE
-%x CHAR_STATE
+%x MUL_COMMENT_STATE
+%x COMMENT_STATE
 %{
     #include <iostream>
     #include "SymbolTable.cpp"
@@ -93,10 +94,11 @@
 	string ostr;
 	int errorCount = 0;
 	ofstream tokenout;
+	int origLine;
 
 %}
 
-NEWLINE \n|\n\r|\r\n
+NEWLINE [\r]?[\n]
 WHITESPACE [ \t\f\r\v]+ 
 
 LETTER [a-zA-Z]
@@ -136,19 +138,14 @@ TOO_MANY_DEC_POINT_ERROR ({DECIMAL}[\.]+({DECIMAL}|{DIGITS}))+
 ESCAPE_SEQUENCE \\[nt\\\'\"afrbv0]
 ESCAPE_SEQUENCE_CHAR [nt\\\'\"afrbv0]
 
-CONST_CHAR \'{ESCAPE_SEQUENCE}\'|\'[^\\\'\n]\'
-UNFINISHED_CHAR \'[^\'\n]*|\'\\\'
+CONST_CHAR \'{ESCAPE_SEQUENCE}\'|\'[^\\\'{NEWLINE}]\'
+UNFINISHED_CHAR \'[^\'{NEWLINE}]*|\'\\\'
 EMPTY_CHAR \'\'
-MUL_CHAR_CONST \'({ESCAPE_SEQUENCE}|[^\\\'\n])+\'
+MUL_CHAR_CONST \'({ESCAPE_SEQUENCE}|[^\\\'{NEWLINE}])+\'
 
 IDENTIFIER {IDENTIFIER_INIT}{ALPHANUM}*
 INVALID_IDENTIFIER {DIGITS}{ALPHANUM}*
 
-STRING \"([^\\\n]|{ESCAPE_SEQUENCE}|\\\n)*\"
-
-COMMENT (\/\*([^\*]|[\r\n]|(\*+([^\*\/]|[\r\n])))*\*+\/)|(\/\/([^\n]|\\\n)*)
-UNFINISHED_COMMENT \/\*([^\*]|[\*]+[^*/])*
-ALL_ASCII_CHAR [ -~]
 
 %%
 
@@ -287,53 +284,74 @@ ALL_ASCII_CHAR [ -~]
 	errorCount++;
 	cout << "Error at line no " << yylineno << ": Unterminated character " << yytext << endl << endl;
 }
-{COMMENT} {
-	cout<<"Line no " << yylineno << ": Token <COMMENT> LEXEME " << yytext << " found"<<endl << endl;
+
+\/\/ {
+	origLine = yylineno;
+	BEGIN COMMENT_STATE;
 }
-{UNFINISHED_COMMENT} {
+
+<COMMENT_STATE>([^{NEWLINE}]|\\{NEWLINE})* {
+	cout<<"Line no " << origLine << ": Token <COMMENT> LEXEME //" << yytext << " found"<<endl << endl;
+	BEGIN INITIAL;
+}
+
+\/\* {
+	origLine = yylineno;
+	BEGIN MUL_COMMENT_STATE;
+}
+
+<MUL_COMMENT_STATE>([^\*]|[\r{NEWLINE}]|(\*+([^\*\/]|[\r{NEWLINE}])))*\*+\/ {
+	cout<<"Line no " << origLine << ": Token <COMMENT> LEXEME /*" << yytext << " found"<<endl << endl;
+	BEGIN INITIAL;
+}
+
+<MUL_COMMENT_STATE>([^\*]|[\*]+[^*/])* {
 	errorCount++;
-	cout << "Error at line no " << yylineno << ": Unterminated Comment " << yytext << endl << endl;
+	cout << "Error at line no " << origLine << ": Unterminated Comment " << yytext << endl << endl;
+	BEGIN INITIAL;
+	return 0;
 }
 
 \" {
 	str = "";
 	ostr = "";
+	origLine = yylineno;
 	BEGIN STRING_STATE;
 }
 <STRING_STATE>{ESCAPE_SEQUENCE} {
 	str.push_back(processEscapeSequence(yytext));
 	ostr.append(yytext);
 }
-<STRING_STATE>\\\n {
+<STRING_STATE>\\{NEWLINE} {
 	ostr.append(yytext);
 }
 <STRING_STATE>\\[^{ESCAPE_SEQUENCE_CHAR}] {
 	ostr.append(yytext);
 	errorCount++;
-	cout << "Error at line no " << yylineno << ": Unknown escape sequence in String " << ostr << endl << endl;
+	cout << "Error at line no " << origLine << ": Unknown escape sequence in String " << ostr << endl << endl;
 	BEGIN INITIAL;
 }
 <STRING_STATE><<EOF>> {
 	errorCount++;
-	cout << "Error at line no " << yylineno << ": Unterminated String " << ostr << endl << endl;
+	cout << "Error at line no " << origLine << ": Unterminated String " << ostr << endl << endl;
 	BEGIN INITIAL;
 	return 0;
 }
-<STRING_STATE>\n {
+<STRING_STATE>{NEWLINE} {
 	errorCount++;
-	cout << "Error at line no " << yylineno << ": Unterminated String " << ostr << endl << endl;
+	cout << "Error at line no " << origLine << ": Unterminated String " << ostr << endl << endl;
 	BEGIN INITIAL;
 }
 <STRING_STATE>\" {
 	tokenout << "<" << "STRING, \"" << str << "\"> ";
-	cout<<"Line no " << yylineno << ": Token <STRING> LEXEME \"" << ostr << "\" found " << "--> <STRING, \"" << str <<"\">"<< endl << endl;
+	cout<<"Line no " << origLine << ": Token <STRING> LEXEME \"" << ostr << "\" found " << "--> <STRING, \"" << str <<"\">"<< endl << endl;
 	BEGIN INITIAL;
 }
 <STRING_STATE>. {
 	str.append(yytext);
 	ostr.append(yytext);
 }
-\n { }
+{NEWLINE} { }
 
 {WHITESPACE} { }
 
