@@ -22,7 +22,7 @@ extern FILE *yyin;
 FILE *fp;
 ofstream errOut;
 
-bool isFuncDef = false;
+bool isErr = false;
 string retType;
 int errorCount = 0;
 
@@ -32,7 +32,7 @@ void printErr(string message);
 
 void yyerror(const char *s){
 	string ss(s);
-	printErr("syntax error : " + ss);
+	printErr(s);
 }
 
 bool isIdInList(vector<SymbolInfo*>* v, SymbolInfo* s){
@@ -50,7 +50,7 @@ void printErr(string message){
 }
 
 string makeDecListString(vector<SymbolInfo*>* v){
-	string s;
+	string s = "";
 	for(auto a : *v) {
 		s += a->getName();
 		if(a->getSize() != ISVAR){
@@ -83,7 +83,10 @@ string makeParamListString(vector<SymbolInfo*>* v){
 
 
 string makeArgListString(vector<SymbolInfo*>* v){
-	string s;
+	string s = "";
+	if(v->size() == 0){
+		return s;
+	}
 	for(auto a : *v) {
 		s += a->getName() + ",";
 	}
@@ -92,19 +95,21 @@ string makeArgListString(vector<SymbolInfo*>* v){
 }
 
 string makeStatementsString(vector<SymbolInfo*>* v){
+	bool flag = false;
 	string s = "";
 	if(v->size() == 2 && v->front()->getName() == "{" && v->back()->getName() == "}"){
 		return "{}\n\n";
 	}
 	for(auto a : *v){
+		if(a->getType() == "if" || a->getType() == "while" || a->getType() == "for"){
+			flag = true;
+		}
+		if(a->getName() == "{" && flag){
+			s.pop_back();
+			flag = false;
+		}
 		s += a->getName() + "\n";
 	}
-	return s;
-}
-
-string makeFuncString(SymbolInfo* func){
-	string s;
-	s += func->getIdType() + " " + func->getName() + "(" + makeParamListString(func->getParamList()) + ")";
 	return s;
 }
 
@@ -119,11 +124,14 @@ string makeFuncString(SymbolInfo* func){
 	vector<SymbolInfo*>* list;
 }
 
-%token IF ELSE FOR WHILE DO INT FLOAT DOUBLE CHAR VOID SWITCH DEFAULT BREAK RETURN CASE CONTINUE
+// DO DOUBLE CHAR SWITCH DEFAULT BREAK CASE CONTINUE CONST_CHAR
+//Not used in any rules
+
+%token IF ELSE FOR WHILE INT FLOAT VOID RETURN
 %token LCURL RCURL LPAREN RPAREN COMMA SEMICOLON LTHIRD RTHIRD
 %token ASSIGNOP INCOP DECOP NOT 
 %token PRINTLN
-%token<symbolInfo> ID CONST_INT CONST_FLOAT CONST_CHAR
+%token<symbolInfo> ID CONST_INT CONST_FLOAT
 %token<type> MULOP RELOP ADDOP LOGICOP
 
 %type<symbolInfo> start program unit func_declaration func_definition variable 
@@ -192,9 +200,27 @@ func_declaration :
 			else {
 				symbolTable->insert(func);
 			}
-			$$ = new SymbolInfo(makeFuncString(func), "func_dec");
+			$$ = new SymbolInfo($1[0] + " " + $2->getName() + "(" + makeParamListString($4) + ");", "func_dec");
 			cout << "Line " << yylineno << ": func_declaration : type_specifier ID LPAREN parameter_list RPAREN SEMICOLON\n\n";
-			cout << $$->getName() << ";\n\n\n";
+			cout << $$->getName() << "\n\n\n";
+		}
+		| type_specifier ID LPAREN parameter_list error RPAREN SEMICOLON {
+			errorCount++;
+			cout << makeParamListString($4) << "\n\n";
+			SymbolInfo* id = symbolTable->lookup($2->getName());
+			SymbolInfo* func = new SymbolInfo($2->getName(), $2->getType(), $1[0]);
+			func->setParamList($4);
+			func->setSize(ISFUNC);
+			if(id != nullptr){
+				errorCount++;
+				printErr("Multiple declaration of " + id->getName());
+			}
+			else {
+				symbolTable->insert(func);
+			}
+			$$ = new SymbolInfo($1[0] + " " + $2->getName() + "(" + makeParamListString($4) + ");", "func_dec");
+			cout << "Line " << yylineno << ": func_declaration : type_specifier ID LPAREN parameter_list RPAREN SEMICOLON\n\n";
+			cout << $$->getName() << "\n\n\n";
 		}
 		| type_specifier ID LPAREN RPAREN SEMICOLON {
 			SymbolInfo* id = symbolTable->lookup($2->getName());
@@ -208,9 +234,9 @@ func_declaration :
 			else {
 				symbolTable->insert(func);
 			}
-			$$ = new SymbolInfo(makeFuncString(func), "func_dec");
+			$$ = new SymbolInfo($1[0] + " " + $2->getName() + "();", "func_dec");
 			cout << "Line " << yylineno << ": func_declaration : type_specifier ID LPAREN RPAREN SEMICOLON\n\n";
-			cout << $$->getName() << ";\n\n\n";
+			cout << $$->getName() << "\n\n\n";
 		}
 		;
 
@@ -262,7 +288,7 @@ func_definition :
 				SymbolInfo* var = $4->at(i);
 				if(var->getName() == ""){
 					errorCount++;
-					printErr((i + 1) + "th parameter's name not given in function definition of " + $2->getName());
+					printErr(to_string(i + 1) + "th parameter's name not given in function definition of " + $2->getName());
 					continue;
 				}
 				if(!symbolTable->insert(var)){
@@ -273,6 +299,69 @@ func_definition :
 
 		} compound_statement {
 			$$ = new SymbolInfo($1[0] + " " + $2->getName() + "(" + makeParamListString($4) + ")" + makeStatementsString($7), "func_def");
+			cout << "Line " << yylineno << ": func_definition : type_specifier ID LPAREN parameter_list RPAREN compound_statement\n\n";
+			cout << $$->getName() << "\n\n";
+		}
+		| type_specifier ID LPAREN parameter_list error RPAREN{
+			errorCount++;
+			cout << makeParamListString($4) << "\n\n";
+			retType = $1[0];
+			SymbolInfo* id = symbolTable->lookup($2->getName());
+			if(id == nullptr){
+				SymbolInfo* func = new SymbolInfo($2->getName(), $2->getType(), $1[0]);
+				func->setSize(ISFUNCDEF);
+				func->setParamList($4);
+				symbolTable->insert(func);
+			}
+			else {
+				if(id->getSize() != ISFUNC){
+					if(id->getSize() == ISFUNCDEF){
+						errorCount++;
+						printErr("Multiple definition of function " + id->getName());
+					}
+					else {
+						errorCount++;
+						printErr("Multiple declaration of " + id->getName());
+					}
+				}
+				else {
+					if($1[0] != id->getIdType()){
+						errorCount++;
+						printErr("Return type mismatch with function declaration in function " + id->getName());
+					}
+					int decParamSize = id->getParamList()->size();
+					int defParamSize = $4->size();
+					if(decParamSize != defParamSize){
+						errorCount++;
+						printErr("Total number of arguments mismatch with declaration in function " + id->getName());
+					}
+
+					for(int i = 0; i < $4->size(); i++){
+						SymbolInfo* var = $4->at(i);
+						if(var->getIdType() != id->getParamList()->at(i)->getIdType()){
+						errorCount++;
+						printErr("Type mispatch in parameter list");
+					}
+					}
+				}
+			}
+			symbolTable->enterScope();
+
+			for(int i = 0; i < $4->size(); i++){
+				SymbolInfo* var = $4->at(i);
+				if(var->getName() == ""){
+					errorCount++;
+					printErr(to_string(i + 1) + "th parameter's name not given in function definition of " + $2->getName());
+					continue;
+				}
+				if(!symbolTable->insert(var)){
+					errorCount++;
+					printErr("Multiple declaration of " + var->getName());
+				}
+			}
+
+		} compound_statement {
+			$$ = new SymbolInfo($1[0] + " " + $2->getName() + "(" + makeParamListString($4) + ")" + makeStatementsString($8), "func_def");
 			cout << "Line " << yylineno << ": func_definition : type_specifier ID LPAREN parameter_list RPAREN compound_statement\n\n";
 			cout << $$->getName() << "\n\n";
 		} | type_specifier ID LPAREN RPAREN {
@@ -311,7 +400,7 @@ func_definition :
 			symbolTable->enterScope();
 		} compound_statement {
 			$$ = new SymbolInfo($1[0] + " " + $2->getName() + "()" + makeStatementsString($6), "func_def");
-			cout << "Line " << yylineno << ": func_definition : type_specifier ID LPAREN parameter_list RPAREN compound_statement\n\n";
+			cout << "Line " << yylineno << ": func_definition : type_specifier ID LPAREN RPAREN compound_statement\n\n";
 			cout << $$->getName() << "\n\n";
 		}
 		;
@@ -337,7 +426,7 @@ parameter_list :
 			$$->push_back(param);
 			cout << makeParamListString($$);
 			cout << "\n\n";
-		}		
+		}
 		| type_specifier ID {
 			cout << "Line " << yylineno << ": parameter_list : type_specifier ID\n\n";
 			$$ = new vector<SymbolInfo*>();
@@ -421,6 +510,49 @@ var_declaration :
 			$$ = new SymbolInfo(name, $1[0], $1[0]);
 			cout << $$->getName() << "\n\n";
 		}
+		| type_specifier declaration_list error SEMICOLON {
+			errorCount++;
+			string name = $1[0] + " ";
+			if($1[0] == "void") {
+				errorCount++;
+				printErr("Variable type can't be void");
+				for(auto a : *$2) {
+					a->setIdType($1[0]);
+					if(a->getSize() > 0){
+						name = name + a->getName() + "[" + to_string(a->getSize()) + "],";
+					}
+					else {
+						name = name + a->getName() + ",";
+					}
+
+				}
+
+				name.pop_back();
+				name += ";";
+			}
+			else{
+				for(auto a : *$2) {
+					a->setIdType($1[0]);
+					if(!symbolTable->insert(a)){
+						errorCount++;
+						printErr("Multiple declaration of " + a->getName());
+					}
+					if(a->getSize() > 0){
+						name = name + a->getName() + "[" + to_string(a->getSize()) + "],";
+					}
+					else {
+						name = name + a->getName() + ",";
+					}
+
+				}
+				name.pop_back();
+				name += ";";
+			}
+
+			cout << "Line " << yylineno << ": var_declaration : type_specifier declaration_list SEMICOLON\n\n";
+			$$ = new SymbolInfo(name, $1[0], $1[0]);
+			cout << $$->getName() << "\n\n";
+		}
  		;
 
 type_specifier : 
@@ -443,6 +575,20 @@ declaration_list :
 			cout << makeDecListString($$);
 			cout << "\n\n";
 		}
+		| declaration_list ID {
+			if(!isErr){
+				printErr("Stntax error");
+				errorCount++;
+			}
+			else {
+				isErr = false;
+			}
+			$$ = $1;
+			$$->push_back($2);
+			cout << "Line " << yylineno << ": declaration_list : declaration_list COMMA ID \n\n"; 
+			cout << makeDecListString($$);
+			cout << "\n\n";
+		}
  	  	| declaration_list COMMA ID LTHIRD CONST_INT RTHIRD {
 			$$ = $1;
 			$3->setSize( stoi($5->getName()));
@@ -451,6 +597,27 @@ declaration_list :
 			cout << makeDecListString($$);
 			cout << "\n\n";
 	  	}
+		| declaration_list ID LTHIRD CONST_INT RTHIRD {
+			if(!isErr){
+				printErr("Stntax error");
+				errorCount++;
+			}
+			else {
+				isErr = false;
+			}
+			$$ = $1;
+			$2->setSize( stoi($4->getName()));
+			$$->push_back($2);
+			cout << "Line " << yylineno << ": declaration_list : declaration_list COMMA ID LTHIRD CONST_INT RTHIRD \n\n"; 
+			cout << makeDecListString($$);
+			cout << "\n\n";
+	  	}
+		| declaration_list error COMMA {
+			yyerrok;
+			isErr = true;
+			errorCount++;
+			$$ = $1;
+		}
  	  	| ID { 
 			$$ = new vector<SymbolInfo*>();
 			$$->push_back($1);
@@ -508,14 +675,14 @@ statement :
 		}
 		| IF LPAREN expression RPAREN statement %prec LOWER_PREC_THAN_ELSE{
 			$$ = new vector<SymbolInfo*>(); 
-			$$->push_back(new SymbolInfo("if(" + $3->getName() + ")", "if"));
+			$$->push_back(new SymbolInfo("if (" + $3->getName() + ")", "if"));
 			$$->insert($$->end(), $5->begin(), $5->end());
 			cout << "Line " << yylineno << ": statement : IF LPAREN expression RPAREN statement\n\n";
 			cout << makeStatementsString($$) << "\n\n";
 		}
 		| IF LPAREN expression RPAREN statement ELSE statement {
 			$$ = new vector<SymbolInfo*>(); 
-			$$->push_back(new SymbolInfo("if(" + $3->getName() + ")" ,	"if"));
+			$$->push_back(new SymbolInfo("if (" + $3->getName() + ")" ,	"if"));
 			$$->insert($$->end(), $5->begin(), $5->end());
 			$$->push_back(new SymbolInfo("else", "else"));
 			$$->insert($$->end(), $7->begin(), $7->end());
@@ -524,7 +691,7 @@ statement :
 		}
 		| WHILE LPAREN expression RPAREN statement {
 			$$ = new vector<SymbolInfo*>(); 
-			$$->push_back(new SymbolInfo("while(" + $3->getName() + ")", "while"));
+			$$->push_back(new SymbolInfo("while (" + $3->getName() + ")", "while"));
 			$$->insert($$->end(), $5->begin(), $5->end());
 			cout << "Line " << yylineno << ": statement : WHILE LPAREN expression RPAREN statement\n\n";
 			cout << makeStatementsString($$) << "\n\n";
@@ -534,11 +701,13 @@ statement :
 			$$->push_back(new SymbolInfo("printf(" + $3->getName() + ");", "printf"));
 			SymbolInfo* id = symbolTable->lookup($3->getName());
 			if(id == nullptr){
-				cout << "Error undeclared variable\n\n";
+				errorCount++;
+				printErr("Undeclared variable " + $3->getName());
 			}
 			else {
 				if(id->getSize() != ISVAR){
-					cout << "Not a var\n\n";
+					errorCount++;
+				printErr($3->getName() + " is not a variable");
 				}
 			}
 			cout << "Line " << yylineno << ": statement : PRINTLN LPAREN ID RPAREN SEMICOLON\n\n";
@@ -548,7 +717,7 @@ statement :
 			$$ = new vector<SymbolInfo*>();
 			$$->push_back(new SymbolInfo("return " + $2->getName() + ";", "return", $2->getIdType()));
 			if(retType == "void") {
-				cout << "Error func void cant return\n\n";
+				printErr("Void function can't have return statement");
 			}
 			cout << "Line " << yylineno << ": statement : RETURN expression SEMICOLON\n\n";
 			cout << makeStatementsString($$) << "\n\n";
@@ -798,7 +967,7 @@ factor :
 						for(int i = 0; i < paramList->size(); i++){
 							if(paramList->at(i)->getIdType() != $3->at(i)->getIdType()){
 								errorCount++;
-								printErr(to_string(i + 1) + "th arguement mismatch in function " + id->getName());
+								printErr(to_string(i + 1) + "th argument mismatch in function " + id->getName());
 								printErr($3->at(i)->getIdType());
 							}
 							else if($3->at(i)->getSize() != ISVAR){
@@ -854,14 +1023,14 @@ arguments :
 		arguments COMMA logic_expression {
 			$$ = $1;
 			$$->push_back($3);
-			cout << "Line " << yylineno << ": arguements : arguments COMMA logic_expression\n\n";
+			cout << "Line " << yylineno << ": arguments : arguments COMMA logic_expression\n\n";
 			cout << makeArgListString($$);
 			cout << "\n\n";
 		}
 		| logic_expression {
 			$$ = new vector<SymbolInfo*>();
 			$$->push_back($1);
-			cout << "Line " << yylineno << ": arguements : logic_expression\n\n";
+			cout << "Line " << yylineno << ": arguments : logic_expression\n\n";
 			cout << makeArgListString($$);
 			cout << "\n\n";
 		}
@@ -870,13 +1039,13 @@ arguments :
 argument_list :
 		arguments {
 			$$ = $1;
-			cout << "Line " << yylineno << ": arguement_list : arguments\n\n";
+			cout << "Line " << yylineno << ": argument_list : arguments\n\n";
 			cout << makeArgListString($$);
 			cout << "\n\n";
 		}
 		| {
 			$$ = new vector<SymbolInfo*>();
-			cout << "Line " << yylineno << ": arguement_list : \n\n";
+			cout << "Line " << yylineno << ": argument_list : \n\n";
 		}
 		;
 %%
