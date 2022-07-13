@@ -283,7 +283,9 @@ INVALID_IDENTIFIER {DIGITS}{ALPHANUM}*
 	return CONST_INT;
 }
 {CONST_FLOAT} {
-	SymbolInfo* sInfo = new SymbolInfo(yytext, "float");
+	string str = to_string(stof(yytext));
+	str.erase ( str.find_last_not_of('0') + 2, std::string::npos );
+	SymbolInfo* sInfo = new SymbolInfo(str, "float");
 	yylval.symbolInfo = sInfo;
 	return CONST_FLOAT;
 }

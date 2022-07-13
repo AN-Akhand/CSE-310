@@ -124,14 +124,11 @@ string makeStatementsString(vector<SymbolInfo*>* v){
 	vector<SymbolInfo*>* list;
 }
 
-// DO DOUBLE CHAR SWITCH DEFAULT BREAK CASE CONTINUE CONST_CHAR
-//Not used in any rules
-
-%token IF ELSE FOR WHILE INT FLOAT VOID RETURN
+%token IF ELSE FOR WHILE DO INT FLOAT DOUBLE CHAR VOID SWITCH DEFAULT BREAK RETURN CASE CONTINUE
 %token LCURL RCURL LPAREN RPAREN COMMA SEMICOLON LTHIRD RTHIRD
 %token ASSIGNOP INCOP DECOP NOT 
 %token PRINTLN
-%token<symbolInfo> ID CONST_INT CONST_FLOAT
+%token<symbolInfo> ID CONST_INT CONST_FLOAT CONST_CHAR
 %token<type> MULOP RELOP ADDOP LOGICOP
 
 %type<symbolInfo> start program unit func_declaration func_definition variable 
