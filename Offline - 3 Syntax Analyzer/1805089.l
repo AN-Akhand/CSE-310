@@ -196,7 +196,8 @@ SEMICOLON ";"
 
 CONST_INT {DIGITS}
 DECIMAL ({DIGIT}*[\.]{DIGIT}+)
-CONST_FLOAT {DECIMAL}|(({DECIMAL}|{DIGITS})[Ee][+-]?{DIGITS})
+CONST_FLOAT_NORMAL {DECIMAL}
+CONST_FLOAT_FANCY (({DECIMAL}|{DIGITS})[Ee][+-]?{DIGITS})
 ILL_FORMED_NUM_ERROR (({DECIMAL}|{DIGITS})[Ee][+-]?{DECIMAL})
 TOO_MANY_DEC_POINT_ERROR ({DECIMAL}[\.]+({DECIMAL}|{DIGITS}))+
 
@@ -282,10 +283,15 @@ INVALID_IDENTIFIER {DIGITS}{ALPHANUM}*
 	yylval.symbolInfo = sInfo;
 	return CONST_INT;
 }
-{CONST_FLOAT} {
+{CONST_FLOAT_NORMAL} {
 	string str = to_string(stof(yytext));
 	str.erase ( str.find_last_not_of('0') + 2, std::string::npos );
 	SymbolInfo* sInfo = new SymbolInfo(str, "float");
+	yylval.symbolInfo = sInfo;
+	return CONST_FLOAT;
+}
+{CONST_FLOAT_FANCY} {
+	SymbolInfo* sInfo = new SymbolInfo(yytext, "float");
 	yylval.symbolInfo = sInfo;
 	return CONST_FLOAT;
 }

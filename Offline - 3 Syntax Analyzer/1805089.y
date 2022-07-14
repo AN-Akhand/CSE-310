@@ -720,6 +720,7 @@ statement :
 			cout << makeStatementsString($$) << "\n\n";
 		}
 		;
+
 expression_statement : 
 		SEMICOLON{
 			$$ = new SymbolInfo(";", "");
@@ -731,7 +732,14 @@ expression_statement :
 			cout << "Line " << yylineno << ": expression_statement : expression SEMICOLON\n\n";
 			cout << $$->getName() << "\n\n";
 		}
-
+		| expression error SEMICOLON{
+			yyerrok;
+			errorCount++;
+			$$ = new SymbolInfo($1->getName() + ";", $1->getType(), $1->getIdType());
+			cout << "Line " << yylineno << ": expression_statement : expression SEMICOLON\n\n";
+			cout << $$->getName() << "\n\n";
+		}
+		;
 
 variable :
 		ID {
@@ -870,6 +878,15 @@ simple_expression :
 			string right = $3->getIdType();
 			cout << "Line " << yylineno << ": simple_expression : simple_expression ADDOP term\n\n";
 			$$ = new SymbolInfo($1->getName() + $2[0] + $3->getName(), (left == "float" || right == "float")?"float":"int");
+			cout << $$->getName() << "\n\n";
+		}
+		| simple_expression ADDOP error term {
+			yyerrok;
+			errorCount++;
+			string left = $1->getIdType();
+			string right = $4->getIdType();
+			cout << "Line " << yylineno << ": simple_expression : simple_expression ADDOP term\n\n";
+			$$ = new SymbolInfo($1->getName() + $2[0] + $4->getName(), (left == "float" || right == "float")?"float":"int");
 			cout << $$->getName() << "\n\n";
 		}
 		;
