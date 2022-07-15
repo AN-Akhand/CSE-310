@@ -11,6 +11,8 @@
 	#include "y.tab.h"
 	using namespace std;
 
+	extern printErr(string message);
+
 
 	extern YYSTYPE yylval;
 
@@ -404,8 +406,8 @@ INVALID_IDENTIFIER {DIGITS}{ALPHANUM}*
 {WHITESPACE} { }
 
 . {
-	//errorCount++;
-	//cout << "Error at line no " << yylineno << ": Unrecognized character " << yytext << endl << endl;
+	errorCount++;
+	printErr("Unrecognized character");
 }
 
 %%

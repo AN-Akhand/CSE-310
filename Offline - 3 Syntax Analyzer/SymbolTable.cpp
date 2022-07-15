@@ -236,7 +236,7 @@ public:
     }
 
     void print(){
-        cout<<"\n\nScopeTable# " << id << endl;
+        cout<<"\n\nScopeTable # " << id << endl;
 
         for(int i = 0; i < size; i++){
             SymbolInfo* root = hashTable[i];

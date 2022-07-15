@@ -31,7 +31,6 @@ SymbolTable *symbolTable = new SymbolTable(7);
 void printErr(string message);
 
 void yyerror(const char *s){
-	string ss(s);
 	printErr(s);
 }
 
@@ -148,7 +147,7 @@ start :
 			symbolTable->printAllScopeTable();
 
 			cout << "Total lines: " << yylineno << endl;
-			cout << "Total error: " << errorCount << endl;
+			cout << "Total errors: " << errorCount << "\n\n";
 		}
 
 
@@ -202,6 +201,9 @@ func_declaration :
 			cout << $$->getName() << "\n\n\n";
 		}
 		| type_specifier ID LPAREN parameter_list error RPAREN SEMICOLON {
+
+			//errors like int foo(int-);
+			yyerrok;
 			errorCount++;
 			cout << makeParamListString($4) << "\n\n";
 			SymbolInfo* id = symbolTable->lookup($2->getName());
@@ -220,6 +222,7 @@ func_declaration :
 			cout << $$->getName() << "\n\n\n";
 		}
 		| type_specifier ID LPAREN RPAREN SEMICOLON {
+			cout << "Line " << yylineno << ": func_declaration : type_specifier ID LPAREN RPAREN SEMICOLON\n\n";
 			SymbolInfo* id = symbolTable->lookup($2->getName());
 			SymbolInfo* func = new SymbolInfo($2->getName(), $2->getType(), $1[0]);
 			func->setParamList(new vector<SymbolInfo*>());
@@ -232,7 +235,6 @@ func_declaration :
 				symbolTable->insert(func);
 			}
 			$$ = new SymbolInfo($1[0] + " " + $2->getName() + "();", "func_dec");
-			cout << "Line " << yylineno << ": func_declaration : type_specifier ID LPAREN RPAREN SEMICOLON\n\n";
 			cout << $$->getName() << "\n\n\n";
 		}
 		;
@@ -295,11 +297,14 @@ func_definition :
 			}
 
 		} compound_statement {
-			$$ = new SymbolInfo($1[0] + " " + $2->getName() + "(" + makeParamListString($4) + ")" + makeStatementsString($7), "func_def");
 			cout << "Line " << yylineno << ": func_definition : type_specifier ID LPAREN parameter_list RPAREN compound_statement\n\n";
+			$$ = new SymbolInfo($1[0] + " " + $2->getName() + "(" + makeParamListString($4) + ")" + makeStatementsString($7), "func_def");
 			cout << $$->getName() << "\n\n";
 		}
 		| type_specifier ID LPAREN parameter_list error RPAREN{
+
+			//errors like int foo(int-){}
+			yyerrok;
 			errorCount++;
 			cout << makeParamListString($4) << "\n\n";
 			retType = $1[0];
@@ -358,10 +363,12 @@ func_definition :
 			}
 
 		} compound_statement {
-			$$ = new SymbolInfo($1[0] + " " + $2->getName() + "(" + makeParamListString($4) + ")" + makeStatementsString($8), "func_def");
 			cout << "Line " << yylineno << ": func_definition : type_specifier ID LPAREN parameter_list RPAREN compound_statement\n\n";
+			$$ = new SymbolInfo($1[0] + " " + $2->getName() + "(" + makeParamListString($4) + ")" + makeStatementsString($8), "func_def");
 			cout << $$->getName() << "\n\n";
 		} | type_specifier ID LPAREN RPAREN {
+
+
 			retType = $1[0];
 			SymbolInfo* id = symbolTable->lookup($2->getName());
 			if(id == nullptr){
@@ -396,8 +403,8 @@ func_definition :
 			}
 			symbolTable->enterScope();
 		} compound_statement {
-			$$ = new SymbolInfo($1[0] + " " + $2->getName() + "()" + makeStatementsString($6), "func_def");
 			cout << "Line " << yylineno << ": func_definition : type_specifier ID LPAREN RPAREN compound_statement\n\n";
+			$$ = new SymbolInfo($1[0] + " " + $2->getName() + "()" + makeStatementsString($6), "func_def");
 			cout << $$->getName() << "\n\n";
 		}
 		;
@@ -405,6 +412,7 @@ func_definition :
 
 parameter_list : 
 		parameter_list COMMA type_specifier ID {
+			cout << "Line " << yylineno << ": parameter_list : parameter_list COMMA type_specifier ID\n\n";
 			$$ = $1;
 			if(isIdInList($$, $4)){
 				errorCount++;
@@ -412,7 +420,6 @@ parameter_list :
 			}
 			$4->setIdType($3[0]);
 			$$->push_back($4);
-			cout << "Line " << yylineno << ": parameter_list : parameter_list COMMA type_specifier ID\n\n";
 			cout << makeParamListString($$);
 			cout << "\n\n";
 		}
@@ -453,6 +460,40 @@ compound_statement :
 			symbolTable->printAllScopeTable();
 			symbolTable->exitScope();
 		}
+		| LCURL statements expression error RCURL{
+			
+			//error in last line of compound statement
+
+			yyerrok;
+			errorCount++;
+
+			$$ = $2;
+			$3->setName($3->getName() + ";");
+			$$->push_back($3);
+			$$->push_back(new SymbolInfo("}", ""));
+			$$->insert($$->begin(),new SymbolInfo("{", ""));
+			cout << "Line " << yylineno << ": compound_statement : LCURL statements RCURL\n\n";
+			cout << makeStatementsString($$) << "\n\n";
+			symbolTable->printAllScopeTable();
+			symbolTable->exitScope();
+		}
+		| LCURL expression error RCURL{
+			
+			//error in compound statement that has only one statement
+
+			yyerrok;
+			errorCount++;
+
+			$$ = new vector<SymbolInfo*>();
+			$2->setName($2->getName() + ";");
+			$$->push_back($2);
+			$$->push_back(new SymbolInfo("}", ""));
+			$$->insert($$->begin(),new SymbolInfo("{", ""));
+			cout << "Line " << yylineno << ": compound_statement : LCURL statements RCURL\n\n";
+			cout << makeStatementsString($$) << "\n\n";
+			symbolTable->printAllScopeTable();
+			symbolTable->exitScope();
+		}
 		| LCURL RCURL {
 			$$ = new vector<SymbolInfo*>();
 			$$->push_back(new SymbolInfo("{", ""));
@@ -466,10 +507,11 @@ compound_statement :
 
 var_declaration : 
 		type_specifier declaration_list SEMICOLON {
+			cout << "Line " << yylineno << ": var_declaration : type_specifier declaration_list SEMICOLON\n\n";
 			string name = $1[0] + " ";
 			if($1[0] == "void") {
 				errorCount++;
-				printErr("Variable type can't be void");
+				printErr("Variable type cannot be void");
 				for(auto a : *$2) {
 					a->setIdType($1[0]);
 					if(a->getSize() > 0){
@@ -503,16 +545,19 @@ var_declaration :
 				name += ";";
 			}
 
-			cout << "Line " << yylineno << ": var_declaration : type_specifier declaration_list SEMICOLON\n\n";
 			$$ = new SymbolInfo(name, $1[0], $1[0]);
 			cout << $$->getName() << "\n\n";
 		}
 		| type_specifier declaration_list error SEMICOLON {
+			cout << "Line " << yylineno << ": var_declaration : type_specifier declaration_list SEMICOLON\n\n";
+
+			//errors like int a, b, ;
+			yyerrok;
 			errorCount++;
 			string name = $1[0] + " ";
 			if($1[0] == "void") {
 				errorCount++;
-				printErr("Variable type can't be void");
+				printErr("Variable type cannot be void");
 				for(auto a : *$2) {
 					a->setIdType($1[0]);
 					if(a->getSize() > 0){
@@ -546,7 +591,6 @@ var_declaration :
 				name += ";";
 			}
 
-			cout << "Line " << yylineno << ": var_declaration : type_specifier declaration_list SEMICOLON\n\n";
 			$$ = new SymbolInfo(name, $1[0], $1[0]);
 			cout << $$->getName() << "\n\n";
 		}
@@ -610,6 +654,9 @@ declaration_list :
 			cout << "\n\n";
 	  	}
 		| declaration_list error COMMA {
+
+			//errors like int x-y, z;
+
 			yyerrok;
 			isErr = true;
 			errorCount++;
@@ -626,7 +673,7 @@ declaration_list :
 			$1->setSize( stoi($3->getName()));
 			$$->push_back($1);
 			cout << "Line " << yylineno << ": declaration_list : ID LTHIRD CONST_INT RTHIRD \n\n"; 
-			cout << $1->getName() << endl << endl;
+			cout << makeDecListString($$) << "\n\n";
 	  	}
  	  ;
 
@@ -694,6 +741,7 @@ statement :
 			cout << makeStatementsString($$) << "\n\n";
 		}
 		| PRINTLN LPAREN ID RPAREN SEMICOLON {
+			cout << "Line " << yylineno << ": statement : PRINTLN LPAREN ID RPAREN SEMICOLON\n\n";
 			$$ = new vector<SymbolInfo*>(); 
 			$$->push_back(new SymbolInfo("printf(" + $3->getName() + ");", "printf"));
 			SymbolInfo* id = symbolTable->lookup($3->getName());
@@ -707,16 +755,19 @@ statement :
 				printErr($3->getName() + " is not a variable");
 				}
 			}
-			cout << "Line " << yylineno << ": statement : PRINTLN LPAREN ID RPAREN SEMICOLON\n\n";
 			cout << makeStatementsString($$) << "\n\n";
 		}
 		| RETURN expression SEMICOLON {
+			cout << "Line " << yylineno << ": statement : RETURN expression SEMICOLON\n\n";
 			$$ = new vector<SymbolInfo*>();
 			$$->push_back(new SymbolInfo("return " + $2->getName() + ";", "return", $2->getIdType()));
 			if(retType == "void") {
 				printErr("Void function can't have return statement");
 			}
-			cout << "Line " << yylineno << ": statement : RETURN expression SEMICOLON\n\n";
+			else if(retType != $2->getIdType()){
+				errorCount++;
+				printErr("Return type mismatch");
+			}
 			cout << makeStatementsString($$) << "\n\n";
 		}
 		;
@@ -733,6 +784,9 @@ expression_statement :
 			cout << $$->getName() << "\n\n";
 		}
 		| expression error SEMICOLON{
+
+			//panic mode recovery, keeps discarding tokens untill it finds a semicolon
+
 			yyerrok;
 			errorCount++;
 			$$ = new SymbolInfo($1->getName() + ";", $1->getType(), $1->getIdType());
@@ -743,6 +797,9 @@ expression_statement :
 
 variable :
 		ID {
+
+			cout << "Line " << yylineno << ": variable : ID\n\n";
+
 			SymbolInfo* id = symbolTable->lookup($1->getName());
 			if(id == nullptr){
 				errorCount++;
@@ -754,10 +811,12 @@ variable :
 				$$ = new SymbolInfo(id->getName(), id->getType(), id->getIdType());
 				$$->setSize(id->getSize());
 			}
-			cout << "Line " << yylineno << ": variable : ID\n\n";
 			cout << $$->getName() << "\n\n";
 		}
 		| ID LTHIRD expression RTHIRD {
+
+			cout << "Line " << yylineno << ": variable : ID LTHIRD expression RTHIRD\n\n";
+
 			SymbolInfo* id = symbolTable->lookup($1->getName());
 
 			if(id == nullptr){
@@ -767,13 +826,13 @@ variable :
 			}
 			else if(id->getSize() < 0){
 				errorCount++;
-				printErr($1->getName() + " is not an array");
+				printErr($1->getName() + " not an array");
 				$$ = new SymbolInfo(id->getName() + "[" + $3->getName() + "]", "ERROR");
 			}
 			else {
 				if($3->getIdType() != "int"){
 					errorCount++;
-					printErr("Expression inside third brackets is not an integer");
+					printErr("Expression inside third brackets not an integer");
 					$$ = new SymbolInfo(id->getName() + "[" + $3->getName() + "]", id->getType(), id->getIdType());
 				}
 				else{
@@ -786,7 +845,6 @@ variable :
 						$$ = new SymbolInfo(id->getName() + "[" + $3->getName() + "]", id->getType(), id->getIdType());
 				}
 			}
-			cout << "Line " << yylineno << ": variable : ID LTHIRD expression RTHIRD\n\n";
 			cout << $$->getName() << "\n\n";
 
 		}
@@ -795,30 +853,26 @@ variable :
 expression :
 		logic_expression {
 			cout << "Line " << yylineno << ": expression : logic_expression\n\n";
-			if($1->getIdType() == "void"){
-				errorCount++;
-				if($1->getType() == "function"){
-					printErr("Void function used in expression");
-				}
-				$1->setType("ERROR");
-			}
 			$$ = $1;
 			cout << $$->getName() << "\n\n";
 		}
 		| variable ASSIGNOP logic_expression {
+
+			cout << "Line " << yylineno << ": expression : variable ASSIGNOP logic_expression\n\n";
+
 			string left = $1->getIdType();
 			string right = $3->getIdType();
 			if($1->getSize() > 0){
 				errorCount++;
-				printErr("Type mismatch, " + $1->getName() + " is an array");
+				printErr("Type Mismatch, " + $1->getName() + " is an array");
 			}
 			else if($3->getSize() > 0){
 				errorCount++;
-				printErr("Type mismatch, " + $3->getName() + " is an array");
+				printErr("Type Mismatch, " + $3->getName() + " is an array");
 			}
 			else if(left == "int" && right == "float"){
 				errorCount++;
-				printErr("Type mismatch");
+				printErr("Type Mismatch");
 			}
 			else if(right == "void"){
 				errorCount++;
@@ -827,7 +881,6 @@ expression :
 				}
 			}
 			$$ = new SymbolInfo($1->getName() + "=" + $3->getName(), left);
-			cout << "Line " << yylineno << ": expression : variable ASSIGNOP logic_expression\n\n";
 			cout << $$->getName() << "\n\n";
 		}
 		;
@@ -840,6 +893,9 @@ logic_expression :
 			cout << $$->getName() << "\n\n";
 		}
 		| rel_expression LOGICOP rel_expression {
+
+			cout << "Line " << yylineno << ": logic_expression : rel_expression LOGICOP rel_expression\n\n";
+
 			string left = $1->getIdType();
 			string right = $3->getIdType();
 			string resultType = "int";
@@ -849,7 +905,6 @@ logic_expression :
 				printErr("Non int operand in logic_expression");
 			}
 			$$ = new SymbolInfo($1->getName() + $2[0] + $3->getName(), (left != "int" || right != "int")?"ERROR":"int");
-			cout << "Line " << yylineno << ": logic_expression : rel_expression LOGICOP rel_expression\n\n";
 			cout << $$->getName() << "\n\n";
 		}
 		;
@@ -876,15 +931,27 @@ simple_expression :
 		| simple_expression ADDOP term {
 			string left = $1->getIdType();
 			string right = $3->getIdType();
+			if(right == "void"){
+				errorCount++;
+				printErr("Void function used in expression");
+			}
 			cout << "Line " << yylineno << ": simple_expression : simple_expression ADDOP term\n\n";
 			$$ = new SymbolInfo($1->getName() + $2[0] + $3->getName(), (left == "float" || right == "float")?"float":"int");
 			cout << $$->getName() << "\n\n";
 		}
 		| simple_expression ADDOP error term {
+
+			//errors like a + = b;
+			//this rule will turn it into a + b
+
 			yyerrok;
 			errorCount++;
 			string left = $1->getIdType();
 			string right = $4->getIdType();
+			if(right == "void"){
+				errorCount++;
+				printErr("Void function used in expression");
+			}
 			cout << "Line " << yylineno << ": simple_expression : simple_expression ADDOP term\n\n";
 			$$ = new SymbolInfo($1->getName() + $2[0] + $4->getName(), (left == "float" || right == "float")?"float":"int");
 			cout << $$->getName() << "\n\n";
@@ -897,9 +964,18 @@ term :
 			cout << $$->getName() << "\n\n";
 		}
 		| term MULOP unary_expression{
+
+			cout << "Line " << yylineno << ": term : term MULOP unary_expression\n\n";
+
 			string left = $1->getIdType();
 			string right = $3->getIdType();
 			string resultType;
+
+			if(right == "void"){
+				errorCount++;
+				printErr("Void function used in expression");
+			}
+
 			if($2[0] == "%"){
 				if(left != "int" || right != "int"){
 					errorCount++;
@@ -909,7 +985,7 @@ term :
 				else{
 					if($3->getName() == "0"){
 						errorCount++;
-						printErr("Division by 0");
+						printErr("Modulus by Zero");
 						resultType = "ERROR";
 					}
 					else {
@@ -933,9 +1009,61 @@ term :
 
 
 			$$ = new SymbolInfo($1->getName() + $2[0] + $3->getName(), resultType);
-			cout << "Line " << yylineno << ": term : term MULOP unary_expression\n\n";
 			cout << $$->getName() << "\n\n";
 		}
+		| term MULOP error unary_expression{
+
+			//errors like a * = b;
+			//this rule will turn it into a * b
+			yyerrok;
+			errorCount++;
+			cout << "Line " << yylineno << ": term : term MULOP unary_expression\n\n";
+
+			string left = $1->getIdType();
+			string right = $4->getIdType();
+			string resultType;
+
+			if(right == "void"){
+				errorCount++;
+				printErr("Void function used in expression");
+			}
+
+			if($2[0] == "%"){
+				if(left != "int" || right != "int"){
+					errorCount++;
+					printErr("Non-Integer operand on modulus operator");
+					resultType = "ERROR";
+				}
+				else{
+					if($4->getName() == "0"){
+						errorCount++;
+						printErr("Modulus by Zero");
+						resultType = "ERROR";
+					}
+					else {
+						resultType = "int";
+					}
+				}
+			}
+			else if($2[0] == "/"){
+				if($4->getName() == "0"){
+					errorCount++;
+					printErr("Division by 0");
+					resultType = "ERROR";
+				}
+				else {
+					resultType = (left == "float" || right == "float")?"float":"int";
+				}
+			}
+			else{
+				resultType = (left == "float" || right == "float")?"float":"int";
+			}
+
+
+			$$ = new SymbolInfo($1->getName() + $2[0] + $4->getName(), resultType);
+			cout << $$->getName() << "\n\n";
+		}
+		;
 
 unary_expression :
 		ADDOP unary_expression{
@@ -962,6 +1090,7 @@ factor :
 			cout << $$->getName() << "\n\n";
 		}
 		| ID LPAREN argument_list RPAREN {
+			cout << "Line " << yylineno << ": factor : ID LPAREN argument_list RPAREN \n\n";
 			SymbolInfo* id = symbolTable->lookup($1->getName());
 			string retType;
 			if(id == nullptr){
@@ -975,23 +1104,22 @@ factor :
 					vector<SymbolInfo*>* paramList = id->getParamList();
 					if(paramList->size() != $3->size()){
 						errorCount++;
-						printErr("Total number of arguments mismatch with declaration in function " + id->getName());
+						printErr("Total number of arguments mismatch in function " + id->getName());
 					}
 					else {
 						for(int i = 0; i < paramList->size(); i++){
 							if(paramList->at(i)->getIdType() != $3->at(i)->getIdType()){
 								errorCount++;
 								printErr(to_string(i + 1) + "th argument mismatch in function " + id->getName());
-								printErr($3->at(i)->getIdType());
 							}
 							else if($3->at(i)->getSize() != ISVAR){
 								if($3->at(i)->getSize() == ISFUNC || $3->at(i)->getSize() == ISFUNCDEF){
 									errorCount++;
-									printErr("Type mismatch, " + $3->at(i)->getName() + " is a function");
+									printErr("Type Mismatch, " + $3->at(i)->getName() + " is a function");
 								}
 								else{
 									errorCount++;
-									printErr("Type mismatch, " + $3->at(i)->getName() + " is an array");
+									printErr("Type Mismatch, " + $3->at(i)->getName() + " is an array");
 								}
 							}
 						}
@@ -999,8 +1127,6 @@ factor :
 				}
 			}
 			$$ = new SymbolInfo($1->getName() + "(" + makeArgListString($3) + ")", "function", retType);
-
-			cout << "Line " << yylineno << ": factor : ID LPAREN argument_list RPAREN \n\n";
 			cout << $$->getName() << "\n\n";
 		}
 		| LPAREN expression RPAREN {
