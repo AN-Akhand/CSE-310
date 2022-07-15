@@ -11,7 +11,7 @@
 	#include "y.tab.h"
 	using namespace std;
 
-	extern printErr(string message);
+	extern void printErr(string message);
 
 
 	extern YYSTYPE yylval;
