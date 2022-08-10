@@ -22,6 +22,7 @@ extern FILE *yyin;
 FILE *fp;
 ofstream errOut;
 int offset = 2;
+int labelCount = 0;
 
 bool isErr = false;
 string retType;
@@ -33,6 +34,10 @@ void printErr(string message);
 
 void yyerror(const char *s){
 	printErr(s);
+}
+
+string makeLabel(){
+	return "label" + to_string(labelCount++);
 }
 
 bool isIdInList(vector<SymbolInfo*>* v, SymbolInfo* s){
@@ -611,7 +616,7 @@ declaration_list :
 			$3->setIdType($<type>0[0]);
 			$3->setOffset(offset);
 			offset+=2;
-			cout << "PUSH 0" << endl;
+			cout << "PUSH 0\n";
 			symbolTable->insert($3);
 			//cout << "Line " << yylineno << ": declaration_list : declaration_list COMMA ID \n\n"; 
 			//cout << makeDecListString($$);
@@ -634,11 +639,13 @@ declaration_list :
  	  	| declaration_list COMMA ID LTHIRD CONST_INT RTHIRD {
 			$$ = $1;
 			$$->push_back($3);
-			$3->setSize( stoi($5->getName()));
+			int size = stoi($5->getName());
+			$3->setSize(size);
 			$3->setIdType($<type>0[0]);
 			$3->setOffset(offset);
-			offset += stoi($5->getName()) * 2;
-			cout << "PUSH 0" << endl;
+			offset += size * 2;
+			for(int i = 0; i < size; i++)
+				cout << "PUSH 0\n";
 			symbolTable->insert($3);
 			//cout << "Line " << yylineno << ": declaration_list : declaration_list COMMA ID LTHIRD CONST_INT RTHIRD \n\n"; 
 			//cout << makeDecListString($$);
@@ -674,7 +681,7 @@ declaration_list :
 			$1->setIdType($<type>0[0]);
 			$1->setOffset(offset);
 			offset+=2;
-			cout << "PUSH 0" << endl;
+			cout << "PUSH 0\n";
 			symbolTable->insert($1);
 			//cout << "Line " << yylineno << ": declaration_list : ID \n\n"; 
 			//cout << $1->getName() << "\n\n";
@@ -682,11 +689,13 @@ declaration_list :
 		| ID LTHIRD CONST_INT RTHIRD {
 			$$ = new vector<SymbolInfo*>();
 			$$->push_back($1);
-			$1->setSize( stoi($3->getName()));
+			int size = stoi($3->getName());
+			$1->setSize(size);
 			$1->setIdType($<type>0[0]);
 			$1->setOffset(offset);
-			offset += stoi($3->getName()) * 2;
-			cout << "PUSH 0" << endl;
+			offset += size * 2;
+			for(int i = 0; i < size; i++)
+				cout << "PUSH 0\n";
 			symbolTable->insert($1);
 			//cout << "Line " << yylineno << ": declaration_list : ID LTHIRD CONST_INT RTHIRD \n\n"; 
 			//cout << makeDecListString($$) << "\n\n";
@@ -826,6 +835,7 @@ variable :
 			else {
 				$$ = new SymbolInfo(id->getName(), id->getType(), id->getIdType());
 				$$->setSize(id->getSize());
+				cout << "MOV SI, " << -1 * id->getOffset() << endl;
 			}
 			//cout << $$->getName() << "\n\n";
 		}
@@ -857,8 +867,11 @@ variable :
 						printErr("Index can't be negative");
 						$$ = new SymbolInfo(id->getName() + "[" + $3->getName() + "]", id->getType(), id->getIdType());
 					}
-					else
+					else{
+						cout << "MOV SI, " << -1 * id->getOffset() << endl;
+						cout << "SUB SI, AX\n";
 						$$ = new SymbolInfo(id->getName() + "[" + $3->getName() + "]", id->getType(), id->getIdType());
+					}
 				}
 			}
 			//cout << $$->getName() << "\n\n";
@@ -875,6 +888,8 @@ expression :
 		| variable ASSIGNOP logic_expression {
 
 			//cout << "Line " << yylineno << ": expression : variable ASSIGNOP logic_expression\n\n";
+
+			cout << "MOV [BP + SI], AX\n";
 
 			string left = $1->getIdType();
 			string right = $3->getIdType();
@@ -897,6 +912,7 @@ expression :
 				}
 			}
 			$$ = new SymbolInfo($1->getName() + "=" + $3->getName(), left);
+
 			//cout << $$->getName() << "\n\n";
 		}
 		;
@@ -908,19 +924,27 @@ logic_expression :
 			//cout << "Line " << yylineno << ": logic_expression : rel_expression\n\n";
 			//cout << $$->getName() << "\n\n";
 		}
-		| rel_expression LOGICOP rel_expression {
+		| rel_expression LOGICOP {cout << "PUSH AX\n";} rel_expression {
+
+			cout << "POP BX\n";
+			if($2[0] == "&&"){
+				cout << "AND AX, BX\n";
+			}
+			else {
+				cout << "OR AX, BX\n";
+			}
 
 			//cout << "Line " << yylineno << ": logic_expression : rel_expression LOGICOP rel_expression\n\n";
 
 			string left = $1->getIdType();
-			string right = $3->getIdType();
+			string right = $4->getIdType();
 			string resultType = "int";
 			if(left != "int" || right != "int"){
 				resultType = "ERROR";
 				errorCount++;
 				printErr("Non int operand in logic_expression");
 			}
-			$$ = new SymbolInfo($1->getName() + $2[0] + $3->getName(), (left != "int" || right != "int")?"ERROR":"int");
+			$$ = new SymbolInfo($1->getName() + $2[0] + $4->getName(), (left != "int" || right != "int")?"ERROR":"int");
 			//cout << $$->getName() << "\n\n";
 		}
 		;
@@ -931,9 +955,39 @@ rel_expression :
 			//cout << "Line " << yylineno << ": rel_expression : simple_expression\n\n";
 			//cout << $$->getName() << "\n\n";
 		}
-		| simple_expression RELOP simple_expression {
+		| simple_expression RELOP {cout << "PUSH AX\n";} simple_expression {
 			//cout << "Line " << yylineno << ": rel_expression : simple_expression RELOP simple_expression\n\n";
-			$$ = new SymbolInfo($1->getName() + $2[0] + $3->getName(), "int");
+			string jump;
+			if($2[0] == "<"){
+				jump = "JL";
+			}
+			else if($2[0] == "<="){
+				jump = "JLE";
+			}
+			else if($2[0] == "=="){
+				jump = "JE";
+			}
+			else if($2[0] == "!="){
+				jump = "JNE";
+			}
+			else if($2[0] == ">="){
+				jump = "JGE";
+			}
+			else if($2[0] == ">"){
+				jump = "JG";
+			}
+			cout << "POP BX" <<  endl;
+			cout << "CMP BX, AX\n";
+			string label1 = makeLabel();
+			string label0 = makeLabel();
+			cout << jump << " " << label1 << endl;
+			cout << "MOV AX, 0\n";
+			cout << "JMP " << label0 << endl;
+			cout << label1 << ":\n";
+			cout << "MOV AX, 1\n";
+			cout << label0 << ":\n";
+
+			$$ = new SymbolInfo($1->getName() + $2[0] + $4->getName(), "int");
 			//cout << $$->getName() << "\n\n";
 		}
 		;
@@ -944,15 +998,23 @@ simple_expression :
 			$$ = $1;
 			//cout << $$->getName() << "\n\n";
 		}
-		| simple_expression ADDOP term {
+		| simple_expression ADDOP {cout << "PUSH AX\n";} term {
+			cout << "POP BX\n";
 			string left = $1->getIdType();
-			string right = $3->getIdType();
+			string right = $4->getIdType();
 			if(right == "void"){
 				errorCount++;
 				printErr("Void function used in expression");
 			}
+			if($2[0] == "+"){
+				cout << "ADD AX, BX\n";
+			}
+			else {
+				cout << "SUB BX, AX\n";
+				cout << "MOV AX, BX\n";
+			}
 			//cout << "Line " << yylineno << ": simple_expression : simple_expression ADDOP term\n\n";
-			$$ = new SymbolInfo($1->getName() + $2[0] + $3->getName(), (left == "float" || right == "float")?"float":"int");
+			$$ = new SymbolInfo($1->getName() + $2[0] + $4->getName(), (left == "float" || right == "float")?"float":"int");
 			//cout << $$->getName() << "\n\n";
 		}
 		| simple_expression ADDOP error term {
@@ -979,12 +1041,17 @@ term :
 			//cout << "Line " << yylineno << ": term : unary_expression\n\n";
 			//cout << $$->getName() << "\n\n";
 		}
-		| term MULOP unary_expression{
+		| term MULOP {cout << "PUSH AX" <<  endl;} unary_expression{
+
+			cout << "POP BX\n";
+			cout << "XCHG   AX, BX\n";
+
+			cout << "XOR DX, DX\n";
 
 			//cout << "Line " << yylineno << ": term : term MULOP unary_expression\n\n";
 
 			string left = $1->getIdType();
-			string right = $3->getIdType();
+			string right = $4->getIdType();
 			string resultType;
 
 			if(right == "void"){
@@ -999,32 +1066,37 @@ term :
 					resultType = "ERROR";
 				}
 				else{
-					if($3->getName() == "0"){
+					if($4->getName() == "0"){
 						errorCount++;
 						printErr("Modulus by Zero");
 						resultType = "ERROR";
 					}
 					else {
+						cout << "IDIV BX\n";
+						cout << "MOV AX, DX\n";
 						resultType = "int";
 					}
 				}
 			}
 			else if($2[0] == "/"){
-				if($3->getName() == "0"){
+				if($4->getName() == "0"){
 					errorCount++;
 					printErr("Division by 0");
 					resultType = "ERROR";
 				}
 				else {
+					cout << "IDIV BX\n";
 					resultType = (left == "float" || right == "float")?"float":"int";
 				}
 			}
 			else{
+				cout <<  "IMUL BX\n";
 				resultType = (left == "float" || right == "float")?"float":"int";
 			}
 
 
-			$$ = new SymbolInfo($1->getName() + $2[0] + $3->getName(), resultType);
+
+			$$ = new SymbolInfo($1->getName() + $2[0] + $4->getName(), resultType);
 			//cout << $$->getName() << "\n\n";
 		}
 		| term MULOP error unary_expression{
@@ -1084,11 +1156,15 @@ term :
 unary_expression :
 		ADDOP unary_expression{
 			$$ = new SymbolInfo($1[0] + $2->getName(), $2->getType(), $2->getIdType());
+			if($1[0] == "-"){
+				cout << "NEG AX\n";
+			}
 			//cout << "Line " << yylineno << ": unary_expression : ADDOP unary_expression\n\n";
 			//cout << $$->getName() << "\n\n";
 		}
 		| NOT unary_expression{
 			$$ = new SymbolInfo("!" + $2->getName(), $2->getType(), $2->getIdType());
+			cout << "NOT AX\n";
 			//cout << "Line " << yylineno << ": unary_expression : NOT unary_expression\n\n";
 			//cout << $$->getName() << "\n\n";
 		}
@@ -1102,6 +1178,7 @@ unary_expression :
 factor : 
 		variable{
 			$$ = $1;
+			cout << "MOV AX, [BP + SI]" <<  endl;
 			//cout << "Line " << yylineno << ": factor : variable\n\n";
 			//cout << $$->getName() << "\n\n";
 		}
@@ -1154,22 +1231,28 @@ factor :
 		| CONST_INT {
 			$$ = $1;
 			$$->setIdType("int");
+			cout << "MOV AX, " << stoi($1->getName()) <<  endl;
 			//cout << "Line " << yylineno << ": factor : CONST_INT\n\n";
 			//cout << $$->getName() << "\n\n";
 		}
 		| CONST_FLOAT {
 			$$ = $1;
 			$$->setIdType("float");
+			cout << "MOV AX, " << stoi($1->getName()) <<  endl;
 			//cout << "Line " << yylineno << ": factor : CONST_FLOAT\n\n";
 			//cout << $$->getName() << "\n\n";
 		}
 		| variable INCOP{
 			$$ = new SymbolInfo($1->getName() + "++", $1->getType(), $1->getIdType());
+			cout << "MOV AX, [BP + SI]\n";
+			cout << "INC [BP + SI]" <<  endl;
 			//cout << "Line " << yylineno << ": factor : variable INCOP\n\n";
 			//cout << $$->getName() << "\n\n";
 		}
 		| variable DECOP{
 			$$ = new SymbolInfo($1->getName() + "--", $1->getType(), $1->getIdType());
+			cout << "MOV AX, [BP + SI]\n";
+			cout << "DEC [BP + SI]" <<  endl;
 			//cout << "Line " << yylineno << ": factor : variable DECOP\n\n";
 			//cout << $$->getName() << "\n\n";
 		}
