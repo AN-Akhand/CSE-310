@@ -13,6 +13,7 @@ class SymbolInfo{
     vector<SymbolInfo*>* paramList;
     int offset;
 public:
+    bool isGlobal;
     SymbolInfo(){
         name = "";
         type = "";
@@ -20,6 +21,7 @@ public:
         nextSymbol = nullptr;
         size = -1;
         paramList = nullptr;
+        isGlobal = false;
     }
 
     SymbolInfo(string name, string type, SymbolInfo* nextSymbol = nullptr){
@@ -29,6 +31,7 @@ public:
         size = -1;
         idType = type;
         paramList = nullptr;
+        isGlobal = false;
     }
 
     SymbolInfo(string name, string type, string idType){
@@ -38,6 +41,7 @@ public:
         size = -1;
         this->idType = idType;
         paramList = nullptr;
+        isGlobal = false;
     }
 
     SymbolInfo(string name, string type, string idType, int offset){
@@ -48,6 +52,7 @@ public:
         this->idType = idType;
         paramList = nullptr;
         this->offset = offset;
+        isGlobal = false;
     }
 
     int getOffset(){
@@ -114,7 +119,7 @@ public:
 
 class ScopeTable{
 
-    int size, count;
+    int size, count, items;
     string id;
     SymbolInfo** hashTable;
     ScopeTable* parentScope;
@@ -346,6 +351,10 @@ public:
 
     void setCurrentScope(ScopeTable* table){
         currentScope = table;
+    }
+
+    string getCurrentScopeId(){
+        return currentScope->getId();
     }
 
     void enterScope(){

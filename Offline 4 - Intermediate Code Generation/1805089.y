@@ -23,10 +23,19 @@ FILE *fp;
 ofstream errOut;
 int offset = 2;
 int labelCount = 0;
+bool isGlobal = false;
+bool isCode = false;
 
 bool isErr = false;
 string retType;
 int errorCount = 0;
+string startLabel;
+string endLabel;
+string forBodyLabel;
+string forUpdateLabel;
+vector<string> labels;
+vector<int> offsets;
+string currFunc;
 
 SymbolTable *symbolTable = new SymbolTable(7);
 
@@ -47,6 +56,19 @@ bool isIdInList(vector<SymbolInfo*>* v, SymbolInfo* s){
 		}
 	}
 	return false;
+}
+
+vector<string> tokenize(string s, string del) {
+	vector<string> temp;
+    int start = 0;
+    int end = s.find(del);
+    while (end != -1) {
+		temp.push_back(s.substr(start, end - start));
+        start = end + del.size();
+        end = s.find(del, start);
+    }
+    temp.push_back(s.substr(start, end - start));
+	return temp;
 }
 
 void printErr(string message){
@@ -148,12 +170,48 @@ string makeStatementsString(vector<SymbolInfo*>* v){
 %%
 
 start : 
-		program {
+		{
+			cout << ".MODEL SMALL\n.STACK 100H \n\nCR EQU 0DH\nLF EQU 0AH\n\n.DATA\n\n";
+		}
+		 program {
 			//cout << "Line " << yylineno << ": start : program\n\n";
-			symbolTable->printAllScopeTable();
+			//symbolTable->printAllScopeTable();
 
 			//cout << "Total lines: " << yylineno << endl;
 			//cout << "Total errors: " << errorCount << "\n\n";
+			cout << "\nPRINT_INT PROC\
+						\n\n\tOR AX, AX\
+						\n\tJGE END_IF1\
+						\n\tPUSH AX\
+						\n\tMOV DL,'-'\
+						\n\tMOV AH, 2\
+						\n\tINT 21H\
+						\n\tPOP AX\
+						\n\tNEG AX\
+						\n\nEND_IF1:\
+						\n\tXOR CX, CX\
+						\n\tMOV BX, 10D\
+						\n\nREPEAT1:\
+						\n\tXOR DX, DX\
+						\n\tDIV BX\
+						\n\tPUSH DX\
+						\n\tINC CX\
+						\n\n\tOR AX, AX\
+						\n\tJNE REPEAT1\
+						\n\n\tMOV AH, 2\
+						\n\nPRINT_LOOP:\
+						\n\tPOP DX\
+						\n\tOR DL, 30H\
+						\n\tINT 21H\
+						\n\tLOOP PRINT_LOOP\
+						\n\tMOV AH, 2\
+						\n\tMOV DL, 10\
+						\n\tINT 21H\
+						\n\n\tMOV DL, 13\
+						\n\tINT 21H\
+						\n\tRET\
+						\nPRINT_INT ENDP\n\n";
+			cout << "END MAIN";
 		}
 
 
@@ -247,6 +305,11 @@ func_declaration :
 
 func_definition : 
 		type_specifier ID LPAREN parameter_list RPAREN {
+			currFunc = $2->getName();
+			if(!isCode){
+				cout << ".CODE\n\n";
+				isCode = true;
+			}
 			retType = $1[0];
 			SymbolInfo* id = symbolTable->lookup($2->getName());
 			if(id == nullptr){
@@ -281,31 +344,43 @@ func_definition :
 					for(int i = 0; i < $4->size(); i++){
 						SymbolInfo* var = $4->at(i);
 						if(var->getIdType() != id->getParamList()->at(i)->getIdType()){
-						errorCount++;
-						printErr("Type mispatch in parameter list");
-					}
+							errorCount++;
+							printErr("Type mispatch in parameter list");
+						}
 					}
 				}
 			}
 			symbolTable->enterScope();
+			offsets.push_back(offset);
+			offset = 2;
+			cout << $2->getName() << " PROC\n";
 
-			for(int i = 0; i < $4->size(); i++){
+			for(int i = $4->size() - 1; i >= 0; i--){
 				SymbolInfo* var = $4->at(i);
 				if(var->getName() == ""){
 					errorCount++;
 					printErr(to_string(i + 1) + "th parameter's name not given in function definition of " + $2->getName());
 					continue;
 				}
+				var->setOffset(-offset);
+				offset += 2;
 				if(!symbolTable->insert(var)){
 					errorCount++;
 					printErr("Multiple declaration of " + var->getName());
 				}
 			}
 
+			offset = 2;
+
 		} compound_statement {
 			//cout << "Line " << yylineno << ": func_definition : type_specifier ID LPAREN parameter_list RPAREN compound_statement\n\n";
 			$$ = new SymbolInfo($1[0] + " " + $2->getName() + "(" + makeParamListString($4) + ")" + makeStatementsString($7), "func_def");
 			//cout << $$->getName() << "\n\n";
+			cout << "MOV SP, BP\n";
+			cout << "RET\n";
+			cout << $2->getName() << " ENDP\n";
+			offset = offsets.back();
+			offsets.pop_back();
 		}
 		| type_specifier ID LPAREN parameter_list error RPAREN{
 
@@ -373,7 +448,11 @@ func_definition :
 			$$ = new SymbolInfo($1[0] + " " + $2->getName() + "(" + makeParamListString($4) + ")" + makeStatementsString($8), "func_def");
 			//cout << $$->getName() << "\n\n";
 		} | type_specifier ID LPAREN RPAREN {
-
+			currFunc = $2->getName();
+			if(!isCode){
+				cout << ".CODE\n\n";
+				isCode = true;
+			}
 
 			retType = $1[0];
 			SymbolInfo* id = symbolTable->lookup($2->getName());
@@ -383,7 +462,7 @@ func_definition :
 				func->setParamList(new vector<SymbolInfo*>());
 				symbolTable->insert(func);
 			}
-						else {
+			else {
 				if(id->getSize() != ISFUNC){
 					if(id->getSize() == ISFUNCDEF){
 						errorCount++;
@@ -408,10 +487,28 @@ func_definition :
 				}
 			}
 			symbolTable->enterScope();
+			offsets.push_back(offset);
+			offset = 2;
+			cout << "\n\n" << $2->getName() << " PROC\n";
+			if($2->getName() == "main"){
+				cout << "MOV AX, @DATA\nMOV DS, AX\n\n";
+				cout << "PUSH BP\nMOV BP, SP\n\n";
+				offset = 2;
+			}
 		} compound_statement {
 			//cout << "Line " << yylineno << ": func_definition : type_specifier ID LPAREN RPAREN compound_statement\n\n";
 			$$ = new SymbolInfo($1[0] + " " + $2->getName() + "()" + makeStatementsString($6), "func_def");
 			//cout << $$->getName() << "\n\n";
+			cout << "MOV SP, BP\n";
+			if($2->getName() == "main"){
+				cout << "MOV AH, 4CH\nINT 21H\n";
+			}
+			else{
+				cout << "RET\n";
+			}
+			cout << $2->getName() << " ENDP\n\n\n";
+			offset = offsets.back();
+			offsets.pop_back();
 		}
 		;
 
@@ -463,7 +560,7 @@ compound_statement :
 			$$->insert($$->begin(),new SymbolInfo("{", ""));
 			//cout << "Line " << yylineno << ": compound_statement : LCURL statements RCURL\n\n";
 			//cout << makeStatementsString($$) << "\n\n";
-			symbolTable->printAllScopeTable();
+			//symbolTable->printAllScopeTable();
 			symbolTable->exitScope();
 		}
 		| LCURL statements expression error RCURL{
@@ -480,7 +577,7 @@ compound_statement :
 			$$->insert($$->begin(),new SymbolInfo("{", ""));
 			//cout << "Line " << yylineno << ": compound_statement : LCURL statements RCURL\n\n";
 			//cout << makeStatementsString($$) << "\n\n";
-			symbolTable->printAllScopeTable();
+			//symbolTable->printAllScopeTable();
 			symbolTable->exitScope();
 		}
 		| LCURL expression error RCURL{
@@ -497,7 +594,7 @@ compound_statement :
 			$$->insert($$->begin(),new SymbolInfo("{", ""));
 			//cout << "Line " << yylineno << ": compound_statement : LCURL statements RCURL\n\n";
 			//cout << makeStatementsString($$) << "\n\n";
-			symbolTable->printAllScopeTable();
+			//symbolTable->printAllScopeTable();
 			symbolTable->exitScope();
 		}
 		| LCURL RCURL {
@@ -506,7 +603,7 @@ compound_statement :
 			$$->push_back(new SymbolInfo("}", ""));
 			//cout << "Line " << yylineno << ": compound_statement : LCURL RCURL\n\n";
 			//cout << makeStatementsString($$);
-			symbolTable->printAllScopeTable();
+			//symbolTable->printAllScopeTable();
 			symbolTable->exitScope();
 		}
 		;
@@ -614,10 +711,18 @@ declaration_list :
 			$$ = $1;
 			$$->push_back($3);
 			$3->setIdType($<type>0[0]);
-			$3->setOffset(offset);
-			offset+=2;
-			cout << "PUSH 0\n";
-			symbolTable->insert($3);
+			if(symbolTable->getCurrentScopeId() == "1"){
+				$3->isGlobal = true;
+				cout << $3->getName() << " DW ?\n";
+			}
+			else{
+				$3->setOffset(offset);
+				offset+=2;
+				cout << "PUSH 0\n";
+			}
+			if(!symbolTable->insert($3)){
+				printErr("Multiple declaration of " + $3->getName());
+			}
 			//cout << "Line " << yylineno << ": declaration_list : declaration_list COMMA ID \n\n"; 
 			//cout << makeDecListString($$);
 			//cout << "\n\n";
@@ -642,11 +747,19 @@ declaration_list :
 			int size = stoi($5->getName());
 			$3->setSize(size);
 			$3->setIdType($<type>0[0]);
-			$3->setOffset(offset);
-			offset += size * 2;
-			for(int i = 0; i < size; i++)
-				cout << "PUSH 0\n";
-			symbolTable->insert($3);
+			if(symbolTable->getCurrentScopeId() == "1"){
+				$3->isGlobal = true;	
+				cout << $3->getName() << " DW " << size <<" DUP(?)\n";
+			}
+			else {
+				$3->setOffset(offset);
+				offset += size * 2;
+				for(int i = 0; i < size; i++)
+					cout << "PUSH 0\n";
+			}
+			if(!symbolTable->insert($3)){
+				printErr("Multiple declaration of " + $3->getName());
+			}
 			//cout << "Line " << yylineno << ": declaration_list : declaration_list COMMA ID LTHIRD CONST_INT RTHIRD \n\n"; 
 			//cout << makeDecListString($$);
 			//cout << "\n\n";
@@ -679,10 +792,19 @@ declaration_list :
 			$$ = new vector<SymbolInfo*>();
 			$$->push_back($1);
 			$1->setIdType($<type>0[0]);
-			$1->setOffset(offset);
-			offset+=2;
-			cout << "PUSH 0\n";
-			symbolTable->insert($1);
+			if(symbolTable->getCurrentScopeId() == "1"){
+				$1->isGlobal = true;
+				cout << $1->getName() << " DW ?\n";
+			}
+			else{
+				$1->setOffset(offset);
+				offset+=2;
+				cout << "PUSH 0\n";
+			}
+			
+			if(!symbolTable->insert($1)){
+				printErr("Multiple declaration of " + $1->getName());
+			}
 			//cout << "Line " << yylineno << ": declaration_list : ID \n\n"; 
 			//cout << $1->getName() << "\n\n";
 		}
@@ -692,11 +814,20 @@ declaration_list :
 			int size = stoi($3->getName());
 			$1->setSize(size);
 			$1->setIdType($<type>0[0]);
-			$1->setOffset(offset);
-			offset += size * 2;
-			for(int i = 0; i < size; i++)
-				cout << "PUSH 0\n";
-			symbolTable->insert($1);
+			if(symbolTable->getCurrentScopeId() == "1"){
+				$1->isGlobal = true;
+				cout << $1->getName() << " DW " << size <<" DUP(?)\n";
+			}
+			else {
+				$1->setOffset(offset);
+				offset += size * 2;
+				for(int i = 0; i < size; i++)
+					cout << "PUSH 0\n";
+			}
+			
+			if(!symbolTable->insert($1)){
+				printErr("Multiple declaration of " + $1->getName());
+			}
 			//cout << "Line " << yylineno << ": declaration_list : ID LTHIRD CONST_INT RTHIRD \n\n"; 
 			//cout << makeDecListString($$) << "\n\n";
 	  	}
@@ -735,33 +866,76 @@ statement :
 			//cout << "Line " << yylineno << ": statement : compound_statement\n\n";
 			//cout << makeStatementsString($$) << "\n\n";
 		}
-		| FOR LPAREN expression_statement expression_statement expression RPAREN statement {
+		| FOR LPAREN expression_statement {
+			startLabel = makeLabel(); 
+			endLabel = makeLabel();
+			forBodyLabel = makeLabel();
+			forUpdateLabel = makeLabel();
+			labels.push_back(endLabel);
+			labels.push_back(forUpdateLabel);
+			cout << startLabel << ":\n";
+		} 
+		expression_statement {
+			cout << "CMP AX, 0\n";
+			cout << "JE " <<  endLabel << endl;
+			cout << "JMP " << forBodyLabel << endl;
+			cout << forUpdateLabel << ":\n";
+		} 
+		expression {cout << "JMP " << startLabel << endl;} RPAREN {cout << forBodyLabel << ":\n";} statement {
 			$$ = new vector<SymbolInfo*>();
-			$$->push_back(new SymbolInfo("for(" + $3->getName() + $4->getName() + $5->getName() + ")", "for"));
-			$$->insert($$->end(), $7->begin(), $7->end());
+			$$->push_back(new SymbolInfo("for(" + $3->getName() + $5->getName() + $7->getName() + ")", "for"));
+			$$->insert($$->end(), $11->begin(), $11->end());
+			cout << "JMP " << labels.back() << endl;
+			labels.pop_back();
+			cout << labels.back() << ":\n";
+			labels.pop_back();
 			//cout << "Line " << yylineno << ": statement : FOR LPAREN expression_statement expression_statement expression RPAREN statement\n\n";
 			//cout << makeStatementsString($$) << "\n\n";
 		}
-		| IF LPAREN expression RPAREN statement %prec LOWER_PREC_THAN_ELSE{
+		| IF LPAREN expression subroutine RPAREN statement %prec LOWER_PREC_THAN_ELSE {
+			vector<string> temp = tokenize(labels.back(), "_");
+
 			$$ = new vector<SymbolInfo*>(); 
 			$$->push_back(new SymbolInfo("if (" + $3->getName() + ")", "if"));
-			$$->insert($$->end(), $5->begin(), $5->end());
+			$$->insert($$->end(), $6->begin(), $6->end());
+			cout << temp.at(0) << ":\n";
+			labels.pop_back();
 			//cout << "Line " << yylineno << ": statement : IF LPAREN expression RPAREN statement\n\n";
 			//cout << makeStatementsString($$) << "\n\n";
 		}
-		| IF LPAREN expression RPAREN statement ELSE statement {
+		| IF LPAREN expression subroutine RPAREN statement ELSE {
+			vector<string> temp = tokenize(labels.back(), "_");
+			cout << "JMP " << temp.back() << endl;
+			cout << temp.at(0) << ":\n";
+		} statement {
+			vector<string> temp = tokenize(labels.back(), "_");
+			labels.pop_back();
+			cout << temp.back() << ":\n";
 			$$ = new vector<SymbolInfo*>(); 
 			$$->push_back(new SymbolInfo("if (" + $3->getName() + ")" ,	"if"));
-			$$->insert($$->end(), $5->begin(), $5->end());
+			$$->insert($$->end(), $6->begin(), $6->end());
 			$$->push_back(new SymbolInfo("else", "else"));
-			$$->insert($$->end(), $7->begin(), $7->end());
+			$$->insert($$->end(), $9->begin(), $9->end());
 			//cout << "Line " << yylineno << ": statement : IF LPAREN expression RPAREN statement ELSE statement\n\n";
 			//cout << makeStatementsString($$) << "\n\n";
 		}
-		| WHILE LPAREN expression RPAREN statement {
+		| WHILE LPAREN {
+			startLabel = makeLabel();
+			endLabel = makeLabel();
+			labels.push_back(endLabel);
+			labels.push_back(startLabel);
+			cout << startLabel << ":\n";
+		} expression {
+			cout << "CMP AX, 0\n";
+			cout << "JE " <<  endLabel << endl;
+		} RPAREN statement {
 			$$ = new vector<SymbolInfo*>(); 
-			$$->push_back(new SymbolInfo("while (" + $3->getName() + ")", "while"));
-			$$->insert($$->end(), $5->begin(), $5->end());
+			$$->push_back(new SymbolInfo("while (" + $4->getName() + ")", "while"));
+			$$->insert($$->end(), $7->begin(), $7->end());
+			cout << "JMP " << labels.back() << endl;
+			labels.pop_back();
+			cout << labels.back() << ":\n";
+			labels.pop_back();
 			//cout << "Line " << yylineno << ": statement : WHILE LPAREN expression RPAREN statement\n\n";
 			//cout << makeStatementsString($$) << "\n\n";
 		}
@@ -777,8 +951,16 @@ statement :
 			else {
 				if(id->getSize() != ISVAR){
 					errorCount++;
-				printErr($3->getName() + " is not a variable");
+					printErr($3->getName() + " is not a variable");
 				}
+				if(id->isGlobal){
+					cout << "LEA SI, " << id->getName() << endl;
+					cout << "MOV AX, [SI]\n";
+				}
+				else {
+					cout << "MOV AX, [BP - " << id->getOffset() << "]\n";
+				}
+				cout << "CALL PRINT_INT\n";
 			}
 			//cout << makeStatementsString($$) << "\n\n";
 		}
@@ -792,6 +974,9 @@ statement :
 			else if(retType != $2->getIdType()){
 				errorCount++;
 				printErr("Return type mismatch");
+			}
+			if(currFunc != "main"){
+				cout << "MOV SP, BP\nRET\n";
 			}
 			//cout << makeStatementsString($$) << "\n\n";
 		}
@@ -835,7 +1020,14 @@ variable :
 			else {
 				$$ = new SymbolInfo(id->getName(), id->getType(), id->getIdType());
 				$$->setSize(id->getSize());
-				cout << "MOV SI, " << -1 * id->getOffset() << endl;
+				if(id->isGlobal){
+					isGlobal = true;
+					cout << "LEA SI, " << $1->getName() << endl;
+				}
+				else {
+					isGlobal = false;
+					cout << "MOV SI, " << -1 * id->getOffset() << endl;
+				}
 			}
 			//cout << $$->getName() << "\n\n";
 		}
@@ -868,8 +1060,16 @@ variable :
 						$$ = new SymbolInfo(id->getName() + "[" + $3->getName() + "]", id->getType(), id->getIdType());
 					}
 					else{
-						cout << "MOV SI, " << -1 * id->getOffset() << endl;
-						cout << "SUB SI, AX\n";
+						if(id->isGlobal){
+							cout << "LEA SI, " << $1->getName() << endl;
+							cout << "ADD SI, AX\n";
+							isGlobal = true;
+						}
+						else {
+							cout << "MOV SI, " << -1 * id->getOffset() << endl;
+							cout << "SUB SI, AX\n";
+							isGlobal = false;
+						}
 						$$ = new SymbolInfo(id->getName() + "[" + $3->getName() + "]", id->getType(), id->getIdType());
 					}
 				}
@@ -885,21 +1085,25 @@ expression :
 			$$ = $1;
 			//cout << $$->getName() << "\n\n";
 		}
-		| variable ASSIGNOP logic_expression {
+		| variable {cout << "PUSH SI\n";} ASSIGNOP logic_expression {
 
+			cout << "POP SI\n";
+			if(isGlobal)
+				cout << "MOV [SI], AX\n";
+			else 
+				cout << "MOV [BP + SI], AX\n";
 			//cout << "Line " << yylineno << ": expression : variable ASSIGNOP logic_expression\n\n";
 
-			cout << "MOV [BP + SI], AX\n";
 
 			string left = $1->getIdType();
-			string right = $3->getIdType();
+			string right = $4->getIdType();
 			if($1->getSize() > 0){
 				errorCount++;
 				printErr("Type Mismatch, " + $1->getName() + " is an array");
 			}
-			else if($3->getSize() > 0){
+			else if($4->getSize() > 0){
 				errorCount++;
-				printErr("Type Mismatch, " + $3->getName() + " is an array");
+				printErr("Type Mismatch, " + $4->getName() + " is an array");
 			}
 			else if(left == "int" && right == "float"){
 				errorCount++;
@@ -907,11 +1111,11 @@ expression :
 			}
 			else if(right == "void"){
 				errorCount++;
-				if($3->getType() == "function"){
+				if($4->getType() == "function"){
 					printErr("Void function used in expression");
 				}
 			}
-			$$ = new SymbolInfo($1->getName() + "=" + $3->getName(), left);
+			$$ = new SymbolInfo($1->getName() + "=" + $4->getName(), left);
 
 			//cout << $$->getName() << "\n\n";
 		}
@@ -927,11 +1131,15 @@ logic_expression :
 		| rel_expression LOGICOP {cout << "PUSH AX\n";} rel_expression {
 
 			cout << "POP BX\n";
+			string lbl1 = makeLabel();
+			string lbl2 = makeLabel();
 			if($2[0] == "&&"){
-				cout << "AND AX, BX\n";
+				cout << "CMP BX, 0\nJE " << lbl1 << "\nCMP AX, 0\nJE " << lbl1 << "\nMOV AX, 1\n";
+				cout << "JMP " << lbl2 << "\n" << lbl1 << ":\nMOV AX, 0\n" << lbl2 << ":\n";
 			}
 			else {
-				cout << "OR AX, BX\n";
+				cout << "CMP BX, 0\nJNE " << lbl1 << "\nCMP AX, 0\nJNE " << lbl1 << "\nMOV AX, 0\n";
+				cout << "JMP " << lbl2 << "\n" << lbl1 << ":\nMOV AX, 1\n" << lbl2 << ":\n";
 			}
 
 			//cout << "Line " << yylineno << ": logic_expression : rel_expression LOGICOP rel_expression\n\n";
@@ -1011,7 +1219,7 @@ simple_expression :
 			}
 			else {
 				cout << "SUB BX, AX\n";
-				cout << "MOV AX, BX\n";
+				cout << "MOV AX, BX\n"; 
 			}
 			//cout << "Line " << yylineno << ": simple_expression : simple_expression ADDOP term\n\n";
 			$$ = new SymbolInfo($1->getName() + $2[0] + $4->getName(), (left == "float" || right == "float")?"float":"int");
@@ -1164,7 +1372,9 @@ unary_expression :
 		}
 		| NOT unary_expression{
 			$$ = new SymbolInfo("!" + $2->getName(), $2->getType(), $2->getIdType());
-			cout << "NOT AX\n";
+			string lbl1 = makeLabel();
+			string lbl2 = makeLabel();
+			cout << "CMP AX, 0\nJE " << lbl1 << "\nMOV AX, 0\nJMP " << lbl2 << "\n" << lbl1 << ":\nMOV AX, 1\n" << lbl2 << ":\n";
 			//cout << "Line " << yylineno << ": unary_expression : NOT unary_expression\n\n";
 			//cout << $$->getName() << "\n\n";
 		}
@@ -1178,11 +1388,20 @@ unary_expression :
 factor : 
 		variable{
 			$$ = $1;
-			cout << "MOV AX, [BP + SI]" <<  endl;
+			if(isGlobal){
+				cout << "MOV AX, [SI]\n";
+			}
+			else{
+				cout << "MOV AX, [BP + SI]\n";
+			}
 			//cout << "Line " << yylineno << ": factor : variable\n\n";
 			//cout << $$->getName() << "\n\n";
 		}
-		| ID LPAREN argument_list RPAREN {
+		| ID LPAREN {
+			cout << "PUSH BP\n";
+		} argument_list RPAREN {
+			cout << "MOV BP, SP\nADD BP, -2\n";
+			cout << "CALL " << $1->getName() << endl;
 			//cout << "Line " << yylineno << ": factor : ID LPAREN argument_list RPAREN \n\n";
 			SymbolInfo* id = symbolTable->lookup($1->getName());
 			string retType;
@@ -1195,31 +1414,35 @@ factor :
 				if(id->getSize() == ISFUNC || id->getSize() == ISFUNCDEF){
 					retType = id->getIdType();
 					vector<SymbolInfo*>* paramList = id->getParamList();
-					if(paramList->size() != $3->size()){
+					if(paramList->size() != $4->size()){
 						errorCount++;
 						printErr("Total number of arguments mismatch in function " + id->getName());
 					}
 					else {
 						for(int i = 0; i < paramList->size(); i++){
-							if(paramList->at(i)->getIdType() != $3->at(i)->getIdType()){
+							if(paramList->at(i)->getIdType() != $4->at(i)->getIdType()){
 								errorCount++;
 								printErr(to_string(i + 1) + "th argument mismatch in function " + id->getName());
 							}
-							else if($3->at(i)->getSize() != ISVAR){
-								if($3->at(i)->getSize() == ISFUNC || $3->at(i)->getSize() == ISFUNCDEF){
+							else if($4->at(i)->getSize() != ISVAR){
+								if($4->at(i)->getSize() == ISFUNC || $4->at(i)->getSize() == ISFUNCDEF){
 									errorCount++;
-									printErr("Type Mismatch, " + $3->at(i)->getName() + " is a function");
+									printErr("Type Mismatch, " + $4->at(i)->getName() + " is a function");
 								}
 								else{
 									errorCount++;
-									printErr("Type Mismatch, " + $3->at(i)->getName() + " is an array");
+									printErr("Type Mismatch, " + $4->at(i)->getName() + " is an array");
 								}
 							}
 						}
 					}
 				}
 			}
-			$$ = new SymbolInfo($1->getName() + "(" + makeArgListString($3) + ")", "function", retType);
+			for(int i = 0; i < $4->size(); i++){
+				cout << "POP BP\n";
+			}
+			cout << "POP BP\n";
+			$$ = new SymbolInfo($1->getName() + "(" + makeArgListString($4) + ")", "function", retType);
 			//cout << $$->getName() << "\n\n";
 		}
 		| LPAREN expression RPAREN {
@@ -1244,15 +1467,23 @@ factor :
 		}
 		| variable INCOP{
 			$$ = new SymbolInfo($1->getName() + "++", $1->getType(), $1->getIdType());
-			cout << "MOV AX, [BP + SI]\n";
-			cout << "INC [BP + SI]" <<  endl;
+			if(isGlobal){
+				cout << "MOV AX, [SI]\nINC [SI]\n";
+			} 
+			else{ 
+				cout << "MOV AX, [BP + SI]\nINC [BP + SI]\n";
+			}
 			//cout << "Line " << yylineno << ": factor : variable INCOP\n\n";
 			//cout << $$->getName() << "\n\n";
 		}
 		| variable DECOP{
 			$$ = new SymbolInfo($1->getName() + "--", $1->getType(), $1->getIdType());
-			cout << "MOV AX, [BP + SI]\n";
-			cout << "DEC [BP + SI]" <<  endl;
+			if(isGlobal){
+				cout << "MOV AX, [SI]\nDEC [SI]\n";
+			} 
+			else{ 
+				cout << "MOV AX, [BP + SI]\nDEC [BP + SI]\n";
+			}
 			//cout << "Line " << yylineno << ": factor : variable DECOP\n\n";
 			//cout << $$->getName() << "\n\n";
 		}
@@ -1262,6 +1493,7 @@ arguments :
 		arguments COMMA logic_expression {
 			$$ = $1;
 			$$->push_back($3);
+			cout << "PUSH AX\n";
 			//cout << "Line " << yylineno << ": arguments : arguments COMMA logic_expression\n\n";
 			//cout << makeArgListString($$);
 			//cout << "\n\n";
@@ -1269,6 +1501,7 @@ arguments :
 		| logic_expression {
 			$$ = new vector<SymbolInfo*>();
 			$$->push_back($1);
+			cout << "PUSH AX\n";
 			//cout << "Line " << yylineno << ": arguments : logic_expression\n\n";
 			//cout << makeArgListString($$);
 			//cout << "\n\n";
@@ -1282,11 +1515,21 @@ argument_list :
 			//cout << makeArgListString($$);
 			//cout << "\n\n";
 		}
-		| {
+		| %empty {
 			$$ = new vector<SymbolInfo*>();
 			//cout << "Line " << yylineno << ": argument_list : \n\n";
 		}
 		;
+
+subroutine:
+  		%empty  { 
+			endLabel = makeLabel();
+			labels.push_back(endLabel + "_" + makeLabel());
+			cout << "CMP AX, 0\n";
+			cout << "JE " <<  endLabel << endl;
+		 }
+		 ;
+
 %%
 
 int main(int argc,char *argv[]) {
@@ -1297,7 +1540,7 @@ int main(int argc,char *argv[]) {
 		exit(1);
 	}
 
-	freopen("1805089_log.txt", "w", stdout);
+	freopen("1805089.asm", "w", stdout);
 	errOut.open("1805089_error.txt");
 
 	yyin=fp;
