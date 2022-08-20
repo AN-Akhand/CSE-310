@@ -5,6 +5,7 @@
 #include<cmath>
 #include<vector>
 #include<fstream>
+#include<iterator>
 #include"SymbolTable.cpp"
 
 #define ISVAR -1
@@ -21,12 +22,14 @@ extern int yylex(void);
 extern FILE *yyin;
 FILE *fp;
 ofstream errOut;
+ofstream logOut;
 int offset = 2;
 int labelCount = 0;
 bool isGlobal = false;
 bool isCode = false;
 
 bool isErr = false;
+bool isErrEnd = false;
 string retType;
 int errorCount = 0;
 string startLabel;
@@ -73,7 +76,8 @@ vector<string> tokenize(string s, string del) {
 
 void printErr(string message){
 	errOut << "Error at line " << yylineno << ": " << message <<"\n\n";
-	//cout << "Error at line " << yylineno << ": " << message <<"\n\n";
+	isErrEnd = true;
+	//logOut << "Error at line " << yylineno << ": " << message <<"\n\n";
 }
 
 string makeDecListString(vector<SymbolInfo*>* v){
@@ -140,6 +144,59 @@ string makeStatementsString(vector<SymbolInfo*>* v){
 	return s;
 }
 
+void optimize(){
+	ifstream oin;
+	oin.open("1805089.asm");
+	string s;
+	vector<string> code;
+	getline(oin, s);
+	code.push_back(s);
+	getline(oin, s);
+	code.push_back(s);
+	getline(oin, s);
+	code.push_back(s);
+    getline(oin, s);
+	code.push_back(s);
+    while(1){
+        auto i = code.end();
+        if(*(i - 1) == "POP SI"){
+			auto j = i;
+            while(*(j - 1) != ".CODE"){
+				j--;
+				if(((j - 1)[0].rfind("MOV SI", 0) == 0) || 
+					((j - 1)[0].rfind("ADD SI", 0) == 0) ||
+					((j - 1)[0].rfind("SUB SI", 0) == 0) ||
+					((j - 1)[0].rfind("LEA SI", 0) == 0)) {
+						break;
+					}
+				else if((j - 1)[0] == "PUSH SI"){
+					code.erase(i - 1);
+					code.erase(j - 1);
+					break;
+				}
+			}
+        }
+		else if(*(i - 1) == "POP BX"){
+            if(*(i - 3) == "PUSH AX" && (i - 4)[0].rfind("MOV AX", 0) == 0){
+                (i - 4)[0][4] = 'B';
+                code.erase(i - 3);
+				code.erase(i - 1);
+            }
+        }
+		if(oin.eof()){
+			break;
+		}
+        getline(oin, s);
+        code.push_back(s);
+        if(s == "END MAIN"){
+            break;
+        }
+    }
+    ofstream output_file("./1805089_optimized.asm");
+    ostream_iterator<string> output_iterator(output_file, "\n");
+    copy(code.begin(), code.end(), output_iterator);
+}
+
 
 %}
 
@@ -171,15 +228,15 @@ string makeStatementsString(vector<SymbolInfo*>* v){
 
 start : 
 		{
-			cout << ".MODEL SMALL\n.STACK 100H \n\nCR EQU 0DH\nLF EQU 0AH\n\n.DATA\n\n";
+			logOut << ".MODEL SMALL\n.STACK 100H \n\nCR EQU 0DH\nLF EQU 0AH\n\n.DATA\n\n";
 		}
 		 program {
-			//cout << "Line " << yylineno << ": start : program\n\n";
+			//logOut << "Line " << yylineno << ": start : program\n\n";
 			//symbolTable->printAllScopeTable();
 
-			//cout << "Total lines: " << yylineno << endl;
-			//cout << "Total errors: " << errorCount << "\n\n";
-			cout << "\nPRINT_INT PROC\
+			//logOut << "Total lines: " << yylineno << endl;
+			//logOut << "Total errors: " << errorCount << "\n\n";
+			logOut << "\nPRINT_INT PROC\
 						\n\n\tOR AX, AX\
 						\n\tJGE END_IF1\
 						\n\tPUSH AX\
@@ -211,20 +268,20 @@ start :
 						\n\tINT 21H\
 						\n\tRET\
 						\nPRINT_INT ENDP\n\n";
-			cout << "END MAIN";
+			logOut << "END MAIN";
 		}
 
 
 program :
 		program unit {
 			$$ = new SymbolInfo($1->getName() + "\n" + $2->getName(), "program");
-			//cout << "Line " << yylineno << ": program : program unit\n\n";
-			//cout << $$->getName() << "\n\n\n";
+			//logOut << "Line " << yylineno << ": program : program unit\n\n";
+			//logOut << $$->getName() << "\n\n\n";
 		}
 		| unit {
 			$$ = $1;
-			//cout << "Line " << yylineno << ": program : unit\n\n";
-			//cout << $$->getName() << "\n\n\n";
+			//logOut << "Line " << yylineno << ": program : unit\n\n";
+			//logOut << $$->getName() << "\n\n\n";
 		}
 
 
@@ -232,18 +289,18 @@ program :
 unit :
 		var_declaration {
 			$$ = $1;
-			//cout << "Line " << yylineno << ": unit : var_declaration\n\n";
-			//cout << $$->getName() << "\n\n\n";
+			//logOut << "Line " << yylineno << ": unit : var_declaration\n\n";
+			//logOut << $$->getName() << "\n\n\n";
 		}
 		| func_declaration {
 			$$ = $1;
-			//cout << "Line " << yylineno << ": unit : func_declaration\n\n";
-			//cout << $$->getName() << "\n\n\n";
+			//logOut << "Line " << yylineno << ": unit : func_declaration\n\n";
+			//logOut << $$->getName() << "\n\n\n";
 		}
 		| func_definition {
 			$$ = $1;
-			//cout << "Line " << yylineno << ": unit : func_definition\n\n";
-			//cout << $$->getName() << "\n\n\n";
+			//logOut << "Line " << yylineno << ": unit : func_definition\n\n";
+			//logOut << $$->getName() << "\n\n\n";
 		}
 
 
@@ -261,15 +318,15 @@ func_declaration :
 				symbolTable->insert(func);
 			}
 			$$ = new SymbolInfo($1[0] + " " + $2->getName() + "(" + makeParamListString($4) + ");", "func_dec");
-			//cout << "Line " << yylineno << ": func_declaration : type_specifier ID LPAREN parameter_list RPAREN SEMICOLON\n\n";
-			//cout << $$->getName() << "\n\n\n";
+			//logOut << "Line " << yylineno << ": func_declaration : type_specifier ID LPAREN parameter_list RPAREN SEMICOLON\n\n";
+			//logOut << $$->getName() << "\n\n\n";
 		}
 		| type_specifier ID LPAREN parameter_list error RPAREN SEMICOLON {
 
 			//errors like int foo(int-);
 			yyerrok;
 			errorCount++;
-			//cout << makeParamListString($4) << "\n\n";
+			//logOut << makeParamListString($4) << "\n\n";
 			SymbolInfo* id = symbolTable->lookup($2->getName());
 			SymbolInfo* func = new SymbolInfo($2->getName(), $2->getType(), $1[0]);
 			func->setParamList($4);
@@ -282,11 +339,11 @@ func_declaration :
 				symbolTable->insert(func);
 			}
 			$$ = new SymbolInfo($1[0] + " " + $2->getName() + "(" + makeParamListString($4) + ");", "func_dec");
-			//cout << "Line " << yylineno << ": func_declaration : type_specifier ID LPAREN parameter_list RPAREN SEMICOLON\n\n";
-			//cout << $$->getName() << "\n\n\n";
+			//logOut << "Line " << yylineno << ": func_declaration : type_specifier ID LPAREN parameter_list RPAREN SEMICOLON\n\n";
+			//logOut << $$->getName() << "\n\n\n";
 		}
 		| type_specifier ID LPAREN RPAREN SEMICOLON {
-			//cout << "Line " << yylineno << ": func_declaration : type_specifier ID LPAREN RPAREN SEMICOLON\n\n";
+			//logOut << "Line " << yylineno << ": func_declaration : type_specifier ID LPAREN RPAREN SEMICOLON\n\n";
 			SymbolInfo* id = symbolTable->lookup($2->getName());
 			SymbolInfo* func = new SymbolInfo($2->getName(), $2->getType(), $1[0]);
 			func->setParamList(new vector<SymbolInfo*>());
@@ -299,7 +356,7 @@ func_declaration :
 				symbolTable->insert(func);
 			}
 			$$ = new SymbolInfo($1[0] + " " + $2->getName() + "();", "func_dec");
-			//cout << $$->getName() << "\n\n\n";
+			//logOut << $$->getName() << "\n\n\n";
 		}
 		;
 
@@ -307,7 +364,7 @@ func_definition :
 		type_specifier ID LPAREN parameter_list RPAREN {
 			currFunc = $2->getName();
 			if(!isCode){
-				cout << ".CODE\n\n";
+				logOut << ".CODE\n\n";
 				isCode = true;
 			}
 			retType = $1[0];
@@ -353,7 +410,7 @@ func_definition :
 			symbolTable->enterScope();
 			offsets.push_back(offset);
 			offset = 2;
-			cout << $2->getName() << " PROC\n";
+			logOut << $2->getName() << " PROC\n";
 
 			for(int i = $4->size() - 1; i >= 0; i--){
 				SymbolInfo* var = $4->at(i);
@@ -373,12 +430,12 @@ func_definition :
 			offset = 2;
 
 		} compound_statement {
-			//cout << "Line " << yylineno << ": func_definition : type_specifier ID LPAREN parameter_list RPAREN compound_statement\n\n";
+			//logOut << "Line " << yylineno << ": func_definition : type_specifier ID LPAREN parameter_list RPAREN compound_statement\n\n";
 			$$ = new SymbolInfo($1[0] + " " + $2->getName() + "(" + makeParamListString($4) + ")" + makeStatementsString($7), "func_def");
-			//cout << $$->getName() << "\n\n";
-			cout << "MOV SP, BP\n";
-			cout << "RET\n";
-			cout << $2->getName() << " ENDP\n";
+			//logOut << $$->getName() << "\n\n";
+			logOut << "MOV SP, BP\n";
+			logOut << "RET\n";
+			logOut << $2->getName() << " ENDP\n";
 			offset = offsets.back();
 			offsets.pop_back();
 		}
@@ -387,7 +444,7 @@ func_definition :
 			//errors like int foo(int-){}
 			yyerrok;
 			errorCount++;
-			//cout << makeParamListString($4) << "\n\n";
+			//logOut << makeParamListString($4) << "\n\n";
 			retType = $1[0];
 			SymbolInfo* id = symbolTable->lookup($2->getName());
 			if(id == nullptr){
@@ -444,13 +501,13 @@ func_definition :
 			}
 
 		} compound_statement {
-			//cout << "Line " << yylineno << ": func_definition : type_specifier ID LPAREN parameter_list RPAREN compound_statement\n\n";
+			//logOut << "Line " << yylineno << ": func_definition : type_specifier ID LPAREN parameter_list RPAREN compound_statement\n\n";
 			$$ = new SymbolInfo($1[0] + " " + $2->getName() + "(" + makeParamListString($4) + ")" + makeStatementsString($8), "func_def");
-			//cout << $$->getName() << "\n\n";
+			//logOut << $$->getName() << "\n\n";
 		} | type_specifier ID LPAREN RPAREN {
 			currFunc = $2->getName();
 			if(!isCode){
-				cout << ".CODE\n\n";
+				logOut << ".CODE\n\n";
 				isCode = true;
 			}
 
@@ -489,24 +546,24 @@ func_definition :
 			symbolTable->enterScope();
 			offsets.push_back(offset);
 			offset = 2;
-			cout << "\n\n" << $2->getName() << " PROC\n";
+			logOut << "\n\n" << $2->getName() << " PROC\n";
 			if($2->getName() == "main"){
-				cout << "MOV AX, @DATA\nMOV DS, AX\n\n";
-				cout << "PUSH BP\nMOV BP, SP\n\n";
+				logOut << "MOV AX, @DATA\nMOV DS, AX\n\n";
+				logOut << "PUSH BP\nMOV BP, SP\n\n";
 				offset = 2;
 			}
 		} compound_statement {
-			//cout << "Line " << yylineno << ": func_definition : type_specifier ID LPAREN RPAREN compound_statement\n\n";
+			//logOut << "Line " << yylineno << ": func_definition : type_specifier ID LPAREN RPAREN compound_statement\n\n";
 			$$ = new SymbolInfo($1[0] + " " + $2->getName() + "()" + makeStatementsString($6), "func_def");
-			//cout << $$->getName() << "\n\n";
-			cout << "MOV SP, BP\n";
+			//logOut << $$->getName() << "\n\n";
+			logOut << "MOV SP, BP\n";
 			if($2->getName() == "main"){
-				cout << "MOV AH, 4CH\nINT 21H\n";
+				logOut << "MOV AH, 4CH\nINT 21H\n";
 			}
 			else{
-				cout << "RET\n";
+				logOut << "RET\n";
 			}
-			cout << $2->getName() << " ENDP\n\n\n";
+			logOut << $2->getName() << " ENDP\n\n\n";
 			offset = offsets.back();
 			offsets.pop_back();
 		}
@@ -515,7 +572,7 @@ func_definition :
 
 parameter_list : 
 		parameter_list COMMA type_specifier ID {
-			//cout << "Line " << yylineno << ": parameter_list : parameter_list COMMA type_specifier ID\n\n";
+			//logOut << "Line " << yylineno << ": parameter_list : parameter_list COMMA type_specifier ID\n\n";
 			$$ = $1;
 			if(isIdInList($$, $4)){
 				errorCount++;
@@ -523,32 +580,32 @@ parameter_list :
 			}
 			$4->setIdType($3[0]);
 			$$->push_back($4);
-			//cout << makeParamListString($$);
-			//cout << "\n\n";
+			//logOut << makeParamListString($$);
+			//logOut << "\n\n";
 		}
 		| parameter_list COMMA type_specifier {
-			//cout << "Line " << yylineno << ": parameter_list : parameter_list COMMA type_specifier\n\n";
+			//logOut << "Line " << yylineno << ": parameter_list : parameter_list COMMA type_specifier\n\n";
 			$$ = $1;
 			SymbolInfo* param = new SymbolInfo($3[0], "");
 			$$->push_back(param);
-			//cout << makeParamListString($$);
-			//cout << "\n\n";
+			//logOut << makeParamListString($$);
+			//logOut << "\n\n";
 		}
 		| type_specifier ID {
-			//cout << "Line " << yylineno << ": parameter_list : type_specifier ID\n\n";
+			//logOut << "Line " << yylineno << ": parameter_list : type_specifier ID\n\n";
 			$$ = new vector<SymbolInfo*>();
 			$2->setIdType($1[0]);
 			$$->push_back($2);
-			//cout << makeParamListString($$);
-			//cout << "\n\n";
+			//logOut << makeParamListString($$);
+			//logOut << "\n\n";
 		}		
 		| type_specifier {
-			//cout << "Line " << yylineno << ": parameter_list : type_specifier\n\n";
+			//logOut << "Line " << yylineno << ": parameter_list : type_specifier\n\n";
 			$$ = new vector<SymbolInfo*>();
 			SymbolInfo* param = new SymbolInfo("", $1[0]);
 			$$->push_back(param);
-			//cout << makeParamListString($$);
-			//cout << "\n\n";
+			//logOut << makeParamListString($$);
+			//logOut << "\n\n";
 		}
 		;
 
@@ -558,8 +615,8 @@ compound_statement :
 			$$ = $2;
 			$$->push_back(new SymbolInfo("}", ""));
 			$$->insert($$->begin(),new SymbolInfo("{", ""));
-			//cout << "Line " << yylineno << ": compound_statement : LCURL statements RCURL\n\n";
-			//cout << makeStatementsString($$) << "\n\n";
+			//logOut << "Line " << yylineno << ": compound_statement : LCURL statements RCURL\n\n";
+			//logOut << makeStatementsString($$) << "\n\n";
 			//symbolTable->printAllScopeTable();
 			symbolTable->exitScope();
 		}
@@ -575,8 +632,8 @@ compound_statement :
 			$$->push_back($3);
 			$$->push_back(new SymbolInfo("}", ""));
 			$$->insert($$->begin(),new SymbolInfo("{", ""));
-			//cout << "Line " << yylineno << ": compound_statement : LCURL statements RCURL\n\n";
-			//cout << makeStatementsString($$) << "\n\n";
+			//logOut << "Line " << yylineno << ": compound_statement : LCURL statements RCURL\n\n";
+			//logOut << makeStatementsString($$) << "\n\n";
 			//symbolTable->printAllScopeTable();
 			symbolTable->exitScope();
 		}
@@ -592,8 +649,8 @@ compound_statement :
 			$$->push_back($2);
 			$$->push_back(new SymbolInfo("}", ""));
 			$$->insert($$->begin(),new SymbolInfo("{", ""));
-			//cout << "Line " << yylineno << ": compound_statement : LCURL statements RCURL\n\n";
-			//cout << makeStatementsString($$) << "\n\n";
+			//logOut << "Line " << yylineno << ": compound_statement : LCURL statements RCURL\n\n";
+			//logOut << makeStatementsString($$) << "\n\n";
 			//symbolTable->printAllScopeTable();
 			symbolTable->exitScope();
 		}
@@ -601,8 +658,8 @@ compound_statement :
 			$$ = new vector<SymbolInfo*>();
 			$$->push_back(new SymbolInfo("{", ""));
 			$$->push_back(new SymbolInfo("}", ""));
-			//cout << "Line " << yylineno << ": compound_statement : LCURL RCURL\n\n";
-			//cout << makeStatementsString($$);
+			//logOut << "Line " << yylineno << ": compound_statement : LCURL RCURL\n\n";
+			//logOut << makeStatementsString($$);
 			//symbolTable->printAllScopeTable();
 			symbolTable->exitScope();
 		}
@@ -610,7 +667,6 @@ compound_statement :
 
 var_declaration : 
 		type_specifier declaration_list SEMICOLON {
-			//cout << "Line " << yylineno << ": var_declaration : type_specifier declaration_list SEMICOLON\n\n";
 			string name = $1[0] + " ";
 			if($1[0] == "void") {
 				errorCount++;
@@ -627,6 +683,7 @@ var_declaration :
 				}
 
 				name.pop_back();
+				logOut << ";" + $$->getName() << "\n";
 				name += ";";
 			}
 			else{
@@ -640,14 +697,14 @@ var_declaration :
 
 				}
 				name.pop_back();
+				logOut << ";" + name << "\n";
 				name += ";";
 			}
 
 			$$ = new SymbolInfo(name, $1[0], $1[0]);
-			//cout << $$->getName() << "\n\n";
 		}
 		| type_specifier declaration_list error SEMICOLON {
-			//cout << "Line " << yylineno << ": var_declaration : type_specifier declaration_list SEMICOLON\n\n";
+			//logOut << "Line " << yylineno << ": var_declaration : type_specifier declaration_list SEMICOLON\n\n";
 
 			//errors like int a, b, ;
 			yyerrok;
@@ -690,19 +747,19 @@ var_declaration :
 			}
 
 			$$ = new SymbolInfo(name, $1[0], $1[0]);
-			//cout << $$->getName() << "\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
  		;
 
 type_specifier : 
 		INT{
-			//cout << "Line " << yylineno << ": type_specifier : INT\n\nint\n\n";
+			//logOut << "Line " << yylineno << ": type_specifier : INT\n\nint\n\n";
 		}
  		| FLOAT{
-			//cout << "Line " << yylineno << ": type_specifier : FLOAT\n\nfloat\n\n";
+			//logOut << "Line " << yylineno << ": type_specifier : FLOAT\n\nfloat\n\n";
 		}
  		| VOID{
-			//cout << "Line " << yylineno << ": type_specifier : VOID\n\nvoid\n\n";
+			//logOut << "Line " << yylineno << ": type_specifier : VOID\n\nvoid\n\n";
 		}
  		;
 			
@@ -713,19 +770,19 @@ declaration_list :
 			$3->setIdType($<type>0[0]);
 			if(symbolTable->getCurrentScopeId() == "1"){
 				$3->isGlobal = true;
-				cout << $3->getName() << " DW ?\n";
+				logOut << $3->getName() << " DW ?\n";
 			}
 			else{
 				$3->setOffset(offset);
 				offset+=2;
-				cout << "PUSH 0\n";
+				logOut << "PUSH 0\n";
 			}
 			if(!symbolTable->insert($3)){
 				printErr("Multiple declaration of " + $3->getName());
 			}
-			//cout << "Line " << yylineno << ": declaration_list : declaration_list COMMA ID \n\n"; 
-			//cout << makeDecListString($$);
-			//cout << "\n\n";
+			//logOut << "Line " << yylineno << ": declaration_list : declaration_list COMMA ID \n\n"; 
+			//logOut << makeDecListString($$);
+			//logOut << "\n\n";
 		}
 		| declaration_list ID {
 			if(!isErr){
@@ -737,9 +794,9 @@ declaration_list :
 			}
 			$$ = $1;
 			$$->push_back($2);
-			//cout << "Line " << yylineno << ": declaration_list : declaration_list COMMA ID \n\n"; 
-			//cout << makeDecListString($$);
-			//cout << "\n\n";
+			//logOut << "Line " << yylineno << ": declaration_list : declaration_list COMMA ID \n\n"; 
+			//logOut << makeDecListString($$);
+			//logOut << "\n\n";
 		}
  	  	| declaration_list COMMA ID LTHIRD CONST_INT RTHIRD {
 			$$ = $1;
@@ -749,20 +806,20 @@ declaration_list :
 			$3->setIdType($<type>0[0]);
 			if(symbolTable->getCurrentScopeId() == "1"){
 				$3->isGlobal = true;	
-				cout << $3->getName() << " DW " << size <<" DUP(?)\n";
+				logOut << $3->getName() << " DW " << size <<" DUP(?)\n";
 			}
 			else {
 				$3->setOffset(offset);
 				offset += size * 2;
 				for(int i = 0; i < size; i++)
-					cout << "PUSH 0\n";
+					logOut << "PUSH 0\n";
 			}
 			if(!symbolTable->insert($3)){
 				printErr("Multiple declaration of " + $3->getName());
 			}
-			//cout << "Line " << yylineno << ": declaration_list : declaration_list COMMA ID LTHIRD CONST_INT RTHIRD \n\n"; 
-			//cout << makeDecListString($$);
-			//cout << "\n\n";
+			//logOut << "Line " << yylineno << ": declaration_list : declaration_list COMMA ID LTHIRD CONST_INT RTHIRD \n\n"; 
+			//logOut << makeDecListString($$);
+			//logOut << "\n\n";
 	  	}
 		| declaration_list ID LTHIRD CONST_INT RTHIRD {
 			if(!isErr){
@@ -775,9 +832,9 @@ declaration_list :
 			$$ = $1;
 			$2->setSize( stoi($4->getName()));
 			$$->push_back($2);
-			//cout << "Line " << yylineno << ": declaration_list : declaration_list COMMA ID LTHIRD CONST_INT RTHIRD \n\n"; 
-			//cout << makeDecListString($$);
-			//cout << "\n\n";
+			//logOut << "Line " << yylineno << ": declaration_list : declaration_list COMMA ID LTHIRD CONST_INT RTHIRD \n\n"; 
+			//logOut << makeDecListString($$);
+			//logOut << "\n\n";
 	  	}
 		| declaration_list error COMMA {
 
@@ -794,19 +851,19 @@ declaration_list :
 			$1->setIdType($<type>0[0]);
 			if(symbolTable->getCurrentScopeId() == "1"){
 				$1->isGlobal = true;
-				cout << $1->getName() << " DW ?\n";
+				logOut << $1->getName() << " DW ?\n";
 			}
 			else{
 				$1->setOffset(offset);
 				offset+=2;
-				cout << "PUSH 0\n";
+				logOut << "PUSH 0\n";
 			}
 			
 			if(!symbolTable->insert($1)){
 				printErr("Multiple declaration of " + $1->getName());
 			}
-			//cout << "Line " << yylineno << ": declaration_list : ID \n\n"; 
-			//cout << $1->getName() << "\n\n";
+			//logOut << "Line " << yylineno << ": declaration_list : ID \n\n"; 
+			//logOut << $1->getName() << "\n\n";
 		}
 		| ID LTHIRD CONST_INT RTHIRD {
 			$$ = new vector<SymbolInfo*>();
@@ -816,20 +873,20 @@ declaration_list :
 			$1->setIdType($<type>0[0]);
 			if(symbolTable->getCurrentScopeId() == "1"){
 				$1->isGlobal = true;
-				cout << $1->getName() << " DW " << size <<" DUP(?)\n";
+				logOut << $1->getName() << " DW " << size <<" DUP(?)\n";
 			}
 			else {
 				$1->setOffset(offset);
 				offset += size * 2;
 				for(int i = 0; i < size; i++)
-					cout << "PUSH 0\n";
+					logOut << "PUSH 0\n";
 			}
 			
 			if(!symbolTable->insert($1)){
 				printErr("Multiple declaration of " + $1->getName());
 			}
-			//cout << "Line " << yylineno << ": declaration_list : ID LTHIRD CONST_INT RTHIRD \n\n"; 
-			//cout << makeDecListString($$) << "\n\n";
+			//logOut << "Line " << yylineno << ": declaration_list : ID LTHIRD CONST_INT RTHIRD \n\n"; 
+			//logOut << makeDecListString($$) << "\n\n";
 	  	}
  	  ;
 
@@ -837,14 +894,14 @@ declaration_list :
 statements :
 		statement {
 			$$ = $1;
-			//cout << "Line " << yylineno << ": statements : statement\n\n";
-			//cout << makeStatementsString($$) << "\n\n";
+			//logOut << "Line " << yylineno << ": statements : statement\n\n";
+			//logOut << makeStatementsString($$) << "\n\n";
 		}
 		| statements statement {
 			$$ = $1;
 			$$->insert($$->end(), $2->begin(), $2->end());
-			//cout << "Line " << yylineno << ": statements : statements statement\n\n";
-			//cout << makeStatementsString($$) << "\n\n";
+			//logOut << "Line " << yylineno << ": statements : statements statement\n\n";
+			//logOut << makeStatementsString($$) << "\n\n";
 		}
 
 
@@ -852,19 +909,19 @@ statement :
 		var_declaration {
 			$$ = new vector<SymbolInfo*>();
 			$$->push_back($1); 
-			//cout << "Line " << yylineno << ": statement : var_declaration\n\n";
-			//cout << makeStatementsString($$) << "\n\n";
+			//logOut << "Line " << yylineno << ": statement : var_declaration\n\n";
+			//logOut << makeStatementsString($$) << "\n\n";
 		}
 		| expression_statement {
 			$$ = new vector<SymbolInfo*>();
 			$$->push_back($1); 
-			//cout << "Line " << yylineno << ": statement : expression_statement\n\n";
-			//cout << makeStatementsString($$) <<  "\n\n";
+			//logOut << "Line " << yylineno << ": statement : expression_statement\n\n";
+			//logOut << makeStatementsString($$) <<  "\n\n";
 		}
 		| {symbolTable->enterScope();} compound_statement {
 			$$ = $2;
-			//cout << "Line " << yylineno << ": statement : compound_statement\n\n";
-			//cout << makeStatementsString($$) << "\n\n";
+			//logOut << "Line " << yylineno << ": statement : compound_statement\n\n";
+			//logOut << makeStatementsString($$) << "\n\n";
 		}
 		| FOR LPAREN expression_statement {
 			startLabel = makeLabel(); 
@@ -873,76 +930,82 @@ statement :
 			forUpdateLabel = makeLabel();
 			labels.push_back(endLabel);
 			labels.push_back(forUpdateLabel);
-			cout << startLabel << ":\n";
+			logOut << startLabel << ":\n";
 		} 
 		expression_statement {
-			cout << "CMP AX, 0\n";
-			cout << "JE " <<  endLabel << endl;
-			cout << "JMP " << forBodyLabel << endl;
-			cout << forUpdateLabel << ":\n";
+			logOut << "CMP AX, 0\n";
+			logOut << "JE " <<  endLabel << endl;
+			logOut << "JMP " << forBodyLabel << endl;
+			logOut << forUpdateLabel << ":\n";
 		} 
-		expression {cout << "JMP " << startLabel << endl;} RPAREN {cout << forBodyLabel << ":\n";} statement {
+		expression {logOut << "JMP " << startLabel << endl;} RPAREN {
+			logOut << forBodyLabel << ":\n";logOut << ";for(" + $3->getName() + $5->getName() + $7->getName() + ")\n";
+		} statement {
 			$$ = new vector<SymbolInfo*>();
 			$$->push_back(new SymbolInfo("for(" + $3->getName() + $5->getName() + $7->getName() + ")", "for"));
 			$$->insert($$->end(), $11->begin(), $11->end());
-			cout << "JMP " << labels.back() << endl;
+			logOut << "JMP " << labels.back() << endl;
 			labels.pop_back();
-			cout << labels.back() << ":\n";
+			logOut << labels.back() << ":\n";
 			labels.pop_back();
-			//cout << "Line " << yylineno << ": statement : FOR LPAREN expression_statement expression_statement expression RPAREN statement\n\n";
-			//cout << makeStatementsString($$) << "\n\n";
+			//logOut << "Line " << yylineno << ": statement : FOR LPAREN expression_statement expression_statement expression RPAREN statement\n\n";
+			//logOut << makeStatementsString($$) << "\n\n";
 		}
 		| IF LPAREN expression subroutine RPAREN statement %prec LOWER_PREC_THAN_ELSE {
 			vector<string> temp = tokenize(labels.back(), "_");
-
 			$$ = new vector<SymbolInfo*>(); 
 			$$->push_back(new SymbolInfo("if (" + $3->getName() + ")", "if"));
 			$$->insert($$->end(), $6->begin(), $6->end());
-			cout << temp.at(0) << ":\n";
+			logOut << temp.at(0) << ":\n";
 			labels.pop_back();
-			//cout << "Line " << yylineno << ": statement : IF LPAREN expression RPAREN statement\n\n";
-			//cout << makeStatementsString($$) << "\n\n";
+			logOut << ";if (" + $3->getName() + ")\n";
+			//logOut << "Line " << yylineno << ": statement : IF LPAREN expression RPAREN statement\n\n";
+			//logOut << makeStatementsString($$) << "\n\n";
 		}
 		| IF LPAREN expression subroutine RPAREN statement ELSE {
+			logOut << ";if (" + $3->getName() + ")\n";
 			vector<string> temp = tokenize(labels.back(), "_");
-			cout << "JMP " << temp.back() << endl;
-			cout << temp.at(0) << ":\n";
+			logOut << "JMP " << temp.back() << endl;
+			logOut << temp.at(0) << ":\n";
+
 		} statement {
 			vector<string> temp = tokenize(labels.back(), "_");
 			labels.pop_back();
-			cout << temp.back() << ":\n";
+			logOut << ";else\n";
+			logOut << temp.back() << ":\n";
 			$$ = new vector<SymbolInfo*>(); 
 			$$->push_back(new SymbolInfo("if (" + $3->getName() + ")" ,	"if"));
 			$$->insert($$->end(), $6->begin(), $6->end());
 			$$->push_back(new SymbolInfo("else", "else"));
 			$$->insert($$->end(), $9->begin(), $9->end());
-			//cout << "Line " << yylineno << ": statement : IF LPAREN expression RPAREN statement ELSE statement\n\n";
-			//cout << makeStatementsString($$) << "\n\n";
+			//logOut << "Line " << yylineno << ": statement : IF LPAREN expression RPAREN statement ELSE statement\n\n";
+			//logOut << makeStatementsString($$) << "\n\n";
 		}
 		| WHILE LPAREN {
 			startLabel = makeLabel();
 			endLabel = makeLabel();
 			labels.push_back(endLabel);
 			labels.push_back(startLabel);
-			cout << startLabel << ":\n";
+			logOut << startLabel << ":\n";
 		} expression {
-			cout << "CMP AX, 0\n";
-			cout << "JE " <<  endLabel << endl;
+			logOut << "CMP AX, 0\n";
+			logOut << "JE " <<  endLabel << endl;
+			logOut << ";while (" + $4->getName() + ")\n";
 		} RPAREN statement {
 			$$ = new vector<SymbolInfo*>(); 
 			$$->push_back(new SymbolInfo("while (" + $4->getName() + ")", "while"));
 			$$->insert($$->end(), $7->begin(), $7->end());
-			cout << "JMP " << labels.back() << endl;
+			logOut << "JMP " << labels.back() << endl;
 			labels.pop_back();
-			cout << labels.back() << ":\n";
+			logOut << labels.back() << ":\n";
 			labels.pop_back();
-			//cout << "Line " << yylineno << ": statement : WHILE LPAREN expression RPAREN statement\n\n";
-			//cout << makeStatementsString($$) << "\n\n";
+			//logOut << "Line " << yylineno << ": statement : WHILE LPAREN expression RPAREN statement\n\n";
+			//logOut << makeStatementsString($$) << "\n\n";
 		}
 		| PRINTLN LPAREN ID RPAREN SEMICOLON {
-			//cout << "Line " << yylineno << ": statement : PRINTLN LPAREN ID RPAREN SEMICOLON\n\n";
+			//logOut << "Line " << yylineno << ": statement : PRINTLN LPAREN ID RPAREN SEMICOLON\n\n";
 			$$ = new vector<SymbolInfo*>(); 
-			$$->push_back(new SymbolInfo("printf(" + $3->getName() + ");", "printf"));
+			$$->push_back(new SymbolInfo("println(" + $3->getName() + ");", "printf"));
 			SymbolInfo* id = symbolTable->lookup($3->getName());
 			if(id == nullptr){
 				errorCount++;
@@ -954,18 +1017,19 @@ statement :
 					printErr($3->getName() + " is not a variable");
 				}
 				if(id->isGlobal){
-					cout << "LEA SI, " << id->getName() << endl;
-					cout << "MOV AX, [SI]\n";
+					logOut << "LEA SI, " << id->getName() << endl;
+					logOut << "MOV AX, [SI]\n";
 				}
 				else {
-					cout << "MOV AX, [BP - " << id->getOffset() << "]\n";
+					logOut << "MOV AX, [BP - " << id->getOffset() << "]\n";
 				}
-				cout << "CALL PRINT_INT\n";
+				logOut << ";println(" + $3->getName() + ")\n";
+				logOut << "CALL PRINT_INT\n";
 			}
-			//cout << makeStatementsString($$) << "\n\n";
+			//logOut << makeStatementsString($$) << "\n\n";
 		}
 		| RETURN expression SEMICOLON {
-			//cout << "Line " << yylineno << ": statement : RETURN expression SEMICOLON\n\n";
+			//logOut << "Line " << yylineno << ": statement : RETURN expression SEMICOLON\n\n";
 			$$ = new vector<SymbolInfo*>();
 			$$->push_back(new SymbolInfo("return " + $2->getName() + ";", "return", $2->getIdType()));
 			if(retType == "void") {
@@ -975,23 +1039,24 @@ statement :
 				errorCount++;
 				printErr("Return type mismatch");
 			}
+			logOut << ";return " + $2->getName() + "\n";
 			if(currFunc != "main"){
-				cout << "MOV SP, BP\nRET\n";
+				logOut << "MOV SP, BP\nRET\n";
 			}
-			//cout << makeStatementsString($$) << "\n\n";
+			//logOut << makeStatementsString($$) << "\n\n";
 		}
 		;
 
 expression_statement : 
 		SEMICOLON{
 			$$ = new SymbolInfo(";", "");
-			//cout << "Line " << yylineno << ": expression_statement : SEMICOLON\n\n";
-			//cout << $$->getName() << "\n\n";
+			//logOut << "Line " << yylineno << ": expression_statement : SEMICOLON\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
 		| expression SEMICOLON {
 			$$ = new SymbolInfo($1->getName() + ";", $1->getType(), $1->getIdType());
-			//cout << "Line " << yylineno << ": expression_statement : expression SEMICOLON\n\n";
-			//cout << $$->getName() << "\n\n";
+			//logOut << "Line " << yylineno << ": expression_statement : expression SEMICOLON\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
 		| expression error SEMICOLON{
 
@@ -1000,15 +1065,15 @@ expression_statement :
 			yyerrok;
 			errorCount++;
 			$$ = new SymbolInfo($1->getName() + ";", $1->getType(), $1->getIdType());
-			//cout << "Line " << yylineno << ": expression_statement : expression SEMICOLON\n\n";
-			//cout << $$->getName() << "\n\n";
+			//logOut << "Line " << yylineno << ": expression_statement : expression SEMICOLON\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
 		;
 
 variable :
 		ID {
 
-			//cout << "Line " << yylineno << ": variable : ID\n\n";
+			//logOut << "Line " << yylineno << ": variable : ID\n\n";
 
 			SymbolInfo* id = symbolTable->lookup($1->getName());
 			if(id == nullptr){
@@ -1022,18 +1087,18 @@ variable :
 				$$->setSize(id->getSize());
 				if(id->isGlobal){
 					isGlobal = true;
-					cout << "LEA SI, " << $1->getName() << endl;
+					logOut << "LEA SI, " << $1->getName() << endl;
 				}
 				else {
 					isGlobal = false;
-					cout << "MOV SI, " << -1 * id->getOffset() << endl;
+					logOut << "MOV SI, " << -1 * id->getOffset() << endl;
 				}
 			}
-			//cout << $$->getName() << "\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
 		| ID LTHIRD expression RTHIRD {
 
-			//cout << "Line " << yylineno << ": variable : ID LTHIRD expression RTHIRD\n\n";
+			//logOut << "Line " << yylineno << ": variable : ID LTHIRD expression RTHIRD\n\n";
 
 			SymbolInfo* id = symbolTable->lookup($1->getName());
 
@@ -1061,38 +1126,38 @@ variable :
 					}
 					else{
 						if(id->isGlobal){
-							cout << "LEA SI, " << $1->getName() << endl;
-							cout << "ADD SI, AX\n";
+							logOut << "LEA SI, " << $1->getName() << endl;
+							logOut << "ADD SI, AX\n";
 							isGlobal = true;
 						}
 						else {
-							cout << "MOV SI, " << -1 * id->getOffset() << endl;
-							cout << "SUB SI, AX\n";
+							logOut << "MOV SI, " << -1 * id->getOffset() << endl;
+							logOut << "SUB SI, AX\n";
 							isGlobal = false;
 						}
 						$$ = new SymbolInfo(id->getName() + "[" + $3->getName() + "]", id->getType(), id->getIdType());
 					}
 				}
 			}
-			//cout << $$->getName() << "\n\n";
+			//logOut << $$->getName() << "\n\n";
 
 		}
 		;
 
 expression :
 		logic_expression {
-			//cout << "Line " << yylineno << ": expression : logic_expression\n\n";
+			//logOut << "Line " << yylineno << ": expression : logic_expression\n\n";
 			$$ = $1;
-			//cout << $$->getName() << "\n\n";
+			logOut << ";" << $$->getName() << endl;
 		}
-		| variable {cout << "PUSH SI\n";} ASSIGNOP logic_expression {
+		| variable {logOut << "PUSH SI\n";} ASSIGNOP logic_expression {
 
-			cout << "POP SI\n";
+			logOut << "POP SI\n";
 			if(isGlobal)
-				cout << "MOV [SI], AX\n";
+				logOut << "MOV [SI], AX\n";
 			else 
-				cout << "MOV [BP + SI], AX\n";
-			//cout << "Line " << yylineno << ": expression : variable ASSIGNOP logic_expression\n\n";
+				logOut << "MOV [BP + SI], AX\n";
+			//logOut << "Line " << yylineno << ": expression : variable ASSIGNOP logic_expression\n\n";
 
 
 			string left = $1->getIdType();
@@ -1117,7 +1182,7 @@ expression :
 			}
 			$$ = new SymbolInfo($1->getName() + "=" + $4->getName(), left);
 
-			//cout << $$->getName() << "\n\n";
+			logOut << ";" << $$->getName() << endl;
 		}
 		;
 
@@ -1125,24 +1190,24 @@ expression :
 logic_expression :
 		rel_expression {
 			$$ = $1;
-			//cout << "Line " << yylineno << ": logic_expression : rel_expression\n\n";
-			//cout << $$->getName() << "\n\n";
+			//logOut << "Line " << yylineno << ": logic_expression : rel_expression\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
-		| rel_expression LOGICOP {cout << "PUSH AX\n";} rel_expression {
+		| rel_expression LOGICOP {logOut << "PUSH AX\n";} rel_expression {
 
-			cout << "POP BX\n";
+			logOut << "POP BX\n";
 			string lbl1 = makeLabel();
 			string lbl2 = makeLabel();
 			if($2[0] == "&&"){
-				cout << "CMP BX, 0\nJE " << lbl1 << "\nCMP AX, 0\nJE " << lbl1 << "\nMOV AX, 1\n";
-				cout << "JMP " << lbl2 << "\n" << lbl1 << ":\nMOV AX, 0\n" << lbl2 << ":\n";
+				logOut << "CMP BX, 0\nJE " << lbl1 << "\nCMP AX, 0\nJE " << lbl1 << "\nMOV AX, 1\n";
+				logOut << "JMP " << lbl2 << "\n" << lbl1 << ":\nMOV AX, 0\n" << lbl2 << ":\n";
 			}
 			else {
-				cout << "CMP BX, 0\nJNE " << lbl1 << "\nCMP AX, 0\nJNE " << lbl1 << "\nMOV AX, 0\n";
-				cout << "JMP " << lbl2 << "\n" << lbl1 << ":\nMOV AX, 1\n" << lbl2 << ":\n";
+				logOut << "CMP BX, 0\nJNE " << lbl1 << "\nCMP AX, 0\nJNE " << lbl1 << "\nMOV AX, 0\n";
+				logOut << "JMP " << lbl2 << "\n" << lbl1 << ":\nMOV AX, 1\n" << lbl2 << ":\n";
 			}
 
-			//cout << "Line " << yylineno << ": logic_expression : rel_expression LOGICOP rel_expression\n\n";
+			//logOut << "Line " << yylineno << ": logic_expression : rel_expression LOGICOP rel_expression\n\n";
 
 			string left = $1->getIdType();
 			string right = $4->getIdType();
@@ -1153,18 +1218,18 @@ logic_expression :
 				printErr("Non int operand in logic_expression");
 			}
 			$$ = new SymbolInfo($1->getName() + $2[0] + $4->getName(), (left != "int" || right != "int")?"ERROR":"int");
-			//cout << $$->getName() << "\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
 		;
 
 rel_expression :
 		simple_expression{
 			$$ = $1;
-			//cout << "Line " << yylineno << ": rel_expression : simple_expression\n\n";
-			//cout << $$->getName() << "\n\n";
+			//logOut << "Line " << yylineno << ": rel_expression : simple_expression\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
-		| simple_expression RELOP {cout << "PUSH AX\n";} simple_expression {
-			//cout << "Line " << yylineno << ": rel_expression : simple_expression RELOP simple_expression\n\n";
+		| simple_expression RELOP {logOut << "PUSH AX\n";} simple_expression {
+			//logOut << "Line " << yylineno << ": rel_expression : simple_expression RELOP simple_expression\n\n";
 			string jump;
 			if($2[0] == "<"){
 				jump = "JL";
@@ -1184,30 +1249,30 @@ rel_expression :
 			else if($2[0] == ">"){
 				jump = "JG";
 			}
-			cout << "POP BX" <<  endl;
-			cout << "CMP BX, AX\n";
+			logOut << "POP BX" <<  endl;
+			logOut << "CMP BX, AX\n";
 			string label1 = makeLabel();
 			string label0 = makeLabel();
-			cout << jump << " " << label1 << endl;
-			cout << "MOV AX, 0\n";
-			cout << "JMP " << label0 << endl;
-			cout << label1 << ":\n";
-			cout << "MOV AX, 1\n";
-			cout << label0 << ":\n";
+			logOut << jump << " " << label1 << endl;
+			logOut << "MOV AX, 0\n";
+			logOut << "JMP " << label0 << endl;
+			logOut << label1 << ":\n";
+			logOut << "MOV AX, 1\n";
+			logOut << label0 << ":\n";
 
 			$$ = new SymbolInfo($1->getName() + $2[0] + $4->getName(), "int");
-			//cout << $$->getName() << "\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
 		;
 
 simple_expression :
 		term {
-			//cout << "Line " << yylineno << ": simple_expression : term\n\n";
+			//logOut << "Line " << yylineno << ": simple_expression : term\n\n";
 			$$ = $1;
-			//cout << $$->getName() << "\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
-		| simple_expression ADDOP {cout << "PUSH AX\n";} term {
-			cout << "POP BX\n";
+		| simple_expression ADDOP {logOut << "PUSH AX\n";} term {
+			logOut << "POP BX\n";
 			string left = $1->getIdType();
 			string right = $4->getIdType();
 			if(right == "void"){
@@ -1215,15 +1280,15 @@ simple_expression :
 				printErr("Void function used in expression");
 			}
 			if($2[0] == "+"){
-				cout << "ADD AX, BX\n";
+				logOut << "ADD AX, BX\n";
 			}
 			else {
-				cout << "SUB BX, AX\n";
-				cout << "MOV AX, BX\n"; 
+				logOut << "SUB BX, AX\n";
+				logOut << "MOV AX, BX\n"; 
 			}
-			//cout << "Line " << yylineno << ": simple_expression : simple_expression ADDOP term\n\n";
+			//logOut << "Line " << yylineno << ": simple_expression : simple_expression ADDOP term\n\n";
 			$$ = new SymbolInfo($1->getName() + $2[0] + $4->getName(), (left == "float" || right == "float")?"float":"int");
-			//cout << $$->getName() << "\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
 		| simple_expression ADDOP error term {
 
@@ -1238,25 +1303,25 @@ simple_expression :
 				errorCount++;
 				printErr("Void function used in expression");
 			}
-			//cout << "Line " << yylineno << ": simple_expression : simple_expression ADDOP term\n\n";
+			//logOut << "Line " << yylineno << ": simple_expression : simple_expression ADDOP term\n\n";
 			$$ = new SymbolInfo($1->getName() + $2[0] + $4->getName(), (left == "float" || right == "float")?"float":"int");
-			//cout << $$->getName() << "\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
 		;
 term :
 		unary_expression{
 			$$ = $1;
-			//cout << "Line " << yylineno << ": term : unary_expression\n\n";
-			//cout << $$->getName() << "\n\n";
+			//logOut << "Line " << yylineno << ": term : unary_expression\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
-		| term MULOP {cout << "PUSH AX" <<  endl;} unary_expression{
+		| term MULOP {logOut << "PUSH AX" <<  endl;} unary_expression{
 
-			cout << "POP BX\n";
-			cout << "XCHG   AX, BX\n";
+			logOut << "POP BX\n";
+			logOut << "XCHG   AX, BX\n";
 
-			cout << "XOR DX, DX\n";
+			logOut << "XOR DX, DX\n";
 
-			//cout << "Line " << yylineno << ": term : term MULOP unary_expression\n\n";
+			//logOut << "Line " << yylineno << ": term : term MULOP unary_expression\n\n";
 
 			string left = $1->getIdType();
 			string right = $4->getIdType();
@@ -1280,8 +1345,8 @@ term :
 						resultType = "ERROR";
 					}
 					else {
-						cout << "IDIV BX\n";
-						cout << "MOV AX, DX\n";
+						logOut << "IDIV BX\n";
+						logOut << "MOV AX, DX\n";
 						resultType = "int";
 					}
 				}
@@ -1293,19 +1358,19 @@ term :
 					resultType = "ERROR";
 				}
 				else {
-					cout << "IDIV BX\n";
+					logOut << "IDIV BX\n";
 					resultType = (left == "float" || right == "float")?"float":"int";
 				}
 			}
 			else{
-				cout <<  "IMUL BX\n";
+				logOut <<  "IMUL BX\n";
 				resultType = (left == "float" || right == "float")?"float":"int";
 			}
 
 
 
 			$$ = new SymbolInfo($1->getName() + $2[0] + $4->getName(), resultType);
-			//cout << $$->getName() << "\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
 		| term MULOP error unary_expression{
 
@@ -1313,7 +1378,7 @@ term :
 			//this rule will turn it into a * b
 			yyerrok;
 			errorCount++;
-			//cout << "Line " << yylineno << ": term : term MULOP unary_expression\n\n";
+			//logOut << "Line " << yylineno << ": term : term MULOP unary_expression\n\n";
 
 			string left = $1->getIdType();
 			string right = $4->getIdType();
@@ -1357,7 +1422,7 @@ term :
 
 
 			$$ = new SymbolInfo($1->getName() + $2[0] + $4->getName(), resultType);
-			//cout << $$->getName() << "\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
 		;
 
@@ -1365,23 +1430,23 @@ unary_expression :
 		ADDOP unary_expression{
 			$$ = new SymbolInfo($1[0] + $2->getName(), $2->getType(), $2->getIdType());
 			if($1[0] == "-"){
-				cout << "NEG AX\n";
+				logOut << "NEG AX\n";
 			}
-			//cout << "Line " << yylineno << ": unary_expression : ADDOP unary_expression\n\n";
-			//cout << $$->getName() << "\n\n";
+			//logOut << "Line " << yylineno << ": unary_expression : ADDOP unary_expression\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
 		| NOT unary_expression{
 			$$ = new SymbolInfo("!" + $2->getName(), $2->getType(), $2->getIdType());
 			string lbl1 = makeLabel();
 			string lbl2 = makeLabel();
-			cout << "CMP AX, 0\nJE " << lbl1 << "\nMOV AX, 0\nJMP " << lbl2 << "\n" << lbl1 << ":\nMOV AX, 1\n" << lbl2 << ":\n";
-			//cout << "Line " << yylineno << ": unary_expression : NOT unary_expression\n\n";
-			//cout << $$->getName() << "\n\n";
+			logOut << "CMP AX, 0\nJE " << lbl1 << "\nMOV AX, 0\nJMP " << lbl2 << "\n" << lbl1 << ":\nMOV AX, 1\n" << lbl2 << ":\n";
+			//logOut << "Line " << yylineno << ": unary_expression : NOT unary_expression\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
 		| factor{
 			$$ = $1;
-			//cout << "Line " << yylineno << ": unary_expression : factor\n\n";
-			//cout << $$->getName() << "\n\n";
+			//logOut << "Line " << yylineno << ": unary_expression : factor\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
 		;
 
@@ -1389,20 +1454,20 @@ factor :
 		variable{
 			$$ = $1;
 			if(isGlobal){
-				cout << "MOV AX, [SI]\n";
+				logOut << "MOV AX, [SI]\n";
 			}
 			else{
-				cout << "MOV AX, [BP + SI]\n";
+				logOut << "MOV AX, [BP + SI]\n";
 			}
-			//cout << "Line " << yylineno << ": factor : variable\n\n";
-			//cout << $$->getName() << "\n\n";
+			//logOut << "Line " << yylineno << ": factor : variable\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
 		| ID LPAREN {
-			cout << "PUSH BP\n";
+			logOut << "PUSH BP\n";
 		} argument_list RPAREN {
-			cout << "MOV BP, SP\nADD BP, -2\n";
-			cout << "CALL " << $1->getName() << endl;
-			//cout << "Line " << yylineno << ": factor : ID LPAREN argument_list RPAREN \n\n";
+			logOut << "MOV BP, SP\nADD BP, -2\n";
+			logOut << "CALL " << $1->getName() << endl;
+			//logOut << "Line " << yylineno << ": factor : ID LPAREN argument_list RPAREN \n\n";
 			SymbolInfo* id = symbolTable->lookup($1->getName());
 			string retType;
 			if(id == nullptr){
@@ -1439,53 +1504,53 @@ factor :
 				}
 			}
 			for(int i = 0; i < $4->size(); i++){
-				cout << "POP BP\n";
+				logOut << "POP BP\n";
 			}
-			cout << "POP BP\n";
+			logOut << "POP BP\n";
 			$$ = new SymbolInfo($1->getName() + "(" + makeArgListString($4) + ")", "function", retType);
-			//cout << $$->getName() << "\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
 		| LPAREN expression RPAREN {
 			$$ = new SymbolInfo("(" + $2->getName() + ")" , $2->getType(), $2->getIdType());
-			//cout << "Line " << yylineno << ": factor : LPAREN expression RPAREN\n\n";
-			//cout << $$->getName() << "\n\n";
+			//logOut << "Line " << yylineno << ": factor : LPAREN expression RPAREN\n\n";
+			//logOut << $$->getName() << "\n\n";
 
 		}
 		| CONST_INT {
 			$$ = $1;
 			$$->setIdType("int");
-			cout << "MOV AX, " << stoi($1->getName()) <<  endl;
-			//cout << "Line " << yylineno << ": factor : CONST_INT\n\n";
-			//cout << $$->getName() << "\n\n";
+			logOut << "MOV AX, " << stoi($1->getName()) <<  endl;
+			//logOut << "Line " << yylineno << ": factor : CONST_INT\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
 		| CONST_FLOAT {
 			$$ = $1;
 			$$->setIdType("float");
-			cout << "MOV AX, " << stoi($1->getName()) <<  endl;
-			//cout << "Line " << yylineno << ": factor : CONST_FLOAT\n\n";
-			//cout << $$->getName() << "\n\n";
+			logOut << "MOV AX, " << stoi($1->getName()) <<  endl;
+			//logOut << "Line " << yylineno << ": factor : CONST_FLOAT\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
 		| variable INCOP{
 			$$ = new SymbolInfo($1->getName() + "++", $1->getType(), $1->getIdType());
 			if(isGlobal){
-				cout << "MOV AX, [SI]\nINC [SI]\n";
+				logOut << "MOV AX, [SI]\nINC [SI]\n";
 			} 
 			else{ 
-				cout << "MOV AX, [BP + SI]\nINC [BP + SI]\n";
+				logOut << "MOV AX, [BP + SI]\nINC [BP + SI]\n";
 			}
-			//cout << "Line " << yylineno << ": factor : variable INCOP\n\n";
-			//cout << $$->getName() << "\n\n";
+			//logOut << "Line " << yylineno << ": factor : variable INCOP\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
 		| variable DECOP{
 			$$ = new SymbolInfo($1->getName() + "--", $1->getType(), $1->getIdType());
 			if(isGlobal){
-				cout << "MOV AX, [SI]\nDEC [SI]\n";
+				logOut << "MOV AX, [SI]\nMOV CX, AX\nDEC CX\nMOV [SI], CX\n";
 			} 
 			else{ 
-				cout << "MOV AX, [BP + SI]\nDEC [BP + SI]\n";
+				logOut << "MOV AX, [BP + SI]\nMOV CX, AX\nDEC CX\nMOV [BP + SI], CX\n";
 			}
-			//cout << "Line " << yylineno << ": factor : variable DECOP\n\n";
-			//cout << $$->getName() << "\n\n";
+			//logOut << "Line " << yylineno << ": factor : variable DECOP\n\n";
+			//logOut << $$->getName() << "\n\n";
 		}
 		;
 
@@ -1493,31 +1558,31 @@ arguments :
 		arguments COMMA logic_expression {
 			$$ = $1;
 			$$->push_back($3);
-			cout << "PUSH AX\n";
-			//cout << "Line " << yylineno << ": arguments : arguments COMMA logic_expression\n\n";
-			//cout << makeArgListString($$);
-			//cout << "\n\n";
+			logOut << "PUSH AX\n";
+			//logOut << "Line " << yylineno << ": arguments : arguments COMMA logic_expression\n\n";
+			//logOut << makeArgListString($$);
+			//logOut << "\n\n";
 		}
 		| logic_expression {
 			$$ = new vector<SymbolInfo*>();
 			$$->push_back($1);
-			cout << "PUSH AX\n";
-			//cout << "Line " << yylineno << ": arguments : logic_expression\n\n";
-			//cout << makeArgListString($$);
-			//cout << "\n\n";
+			logOut << "PUSH AX\n";
+			//logOut << "Line " << yylineno << ": arguments : logic_expression\n\n";
+			//logOut << makeArgListString($$);
+			//logOut << "\n\n";
 		}
 		;
 
 argument_list :
 		arguments {
 			$$ = $1;
-			//cout << "Line " << yylineno << ": argument_list : arguments\n\n";
-			//cout << makeArgListString($$);
-			//cout << "\n\n";
+			//logOut << "Line " << yylineno << ": argument_list : arguments\n\n";
+			//logOut << makeArgListString($$);
+			//logOut << "\n\n";
 		}
 		| %empty {
 			$$ = new vector<SymbolInfo*>();
-			//cout << "Line " << yylineno << ": argument_list : \n\n";
+			//logOut << "Line " << yylineno << ": argument_list : \n\n";
 		}
 		;
 
@@ -1525,8 +1590,8 @@ subroutine:
   		%empty  { 
 			endLabel = makeLabel();
 			labels.push_back(endLabel + "_" + makeLabel());
-			cout << "CMP AX, 0\n";
-			cout << "JE " <<  endLabel << endl;
+			logOut << "CMP AX, 0\n";
+			logOut << "JE " <<  endLabel << endl;
 		 }
 		 ;
 
@@ -1540,13 +1605,20 @@ int main(int argc,char *argv[]) {
 		exit(1);
 	}
 
-	freopen("1805089.asm", "w", stdout);
+	logOut.open("1805089.asm");
 	errOut.open("1805089_error.txt");
 
 	yyin=fp;
 	yyparse();
-	
 
+	logOut.flush();
+	logOut.close();
+
+	if(isErrEnd){
+		fopen("1805089.asm", "w");
+	}
+
+	optimize();
 	
 	return 0;
 }

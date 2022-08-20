@@ -5,3 +5,5 @@ lex.yy.c
 y.tab.h
 y.tab.c
 *.txt
+in.c
+1805089.asm

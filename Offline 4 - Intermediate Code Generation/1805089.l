@@ -151,7 +151,7 @@
 		else if(symbol[0] == "continue"){
 			return CONTINUE;
 		}
-		else if(symbol[0] == "println"){
+		else if(symbol[0] == "println" || symbol[0] == "printf"){
 			return PRINTLN;
 		}
 	}
@@ -172,7 +172,7 @@ DIGIT [0-9]
 DIGITS {DIGIT}+
 IDENTIFIER_INIT {LETTER}|_
 
-KEYWORDS "if"|"for"|"do"|"int"|"float"|"void"|"switch"|"default"|"else"|"while"|"break"|"char"|"double"|"return"|"case"|"continue"|"println"
+KEYWORDS "if"|"for"|"do"|"int"|"float"|"void"|"switch"|"default"|"else"|"while"|"break"|"char"|"double"|"return"|"case"|"continue"|"println"|"printf"
 
 ALPHANUM [a-zA-Z0-9]
 

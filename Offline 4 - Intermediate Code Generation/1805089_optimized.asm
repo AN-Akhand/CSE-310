@@ -12,17 +12,13 @@ f PROC
 PUSH 0
 ;int k
 MOV SI, -2
-PUSH SI
 MOV AX, 5
-POP SI
 MOV [BP + SI], AX
 ;k=5
 label0:
 MOV SI, -2
-MOV AX, [BP + SI]
-PUSH AX
+MOV BX, [BP + SI]
 MOV AX, 0
-POP BX
 CMP BX, AX
 JG label2
 MOV AX, 0
@@ -64,9 +60,7 @@ MOV AX, BX
 MOV SP, BP
 RET
 MOV SI, 2
-PUSH SI
 MOV AX, 9
-POP SI
 MOV [BP + SI], AX
 ;a=9
 MOV SP, BP
@@ -101,17 +95,13 @@ POP SI
 MOV [BP + SI], AX
 ;x=f(a)+a+b
 MOV SI, -4
-PUSH SI
 MOV AX, 0
-POP SI
 MOV [BP + SI], AX
 ;i=0
 label4:
 MOV SI, -4
-MOV AX, [BP + SI]
-PUSH AX
+MOV BX, [BP + SI]
 MOV AX, 7
-POP BX
 CMP BX, AX
 JL label8
 MOV AX, 0
@@ -132,17 +122,13 @@ JMP label4
 label6:
 ;for(i=0;i<7;i++)
 MOV SI, -4
-MOV AX, [BP + SI]
-PUSH AX
+MOV BX, [BP + SI]
 MOV AX, 3
-POP BX
 XCHG   AX, BX
 XOR DX, DX
 IDIV BX
-MOV AX, DX
-PUSH AX
+MOV BX, DX
 MOV AX, 0
-POP BX
 CMP BX, AX
 JE label10
 MOV AX, 0
@@ -156,10 +142,8 @@ JE label12
 MOV SI, -2
 PUSH SI
 MOV SI, -2
-MOV AX, [BP + SI]
-PUSH AX
+MOV BX, [BP + SI]
 MOV AX, 5
-POP BX
 ADD AX, BX
 POP SI
 MOV [BP + SI], AX
@@ -170,10 +154,8 @@ label12:
 MOV SI, -2
 PUSH SI
 MOV SI, -2
-MOV AX, [BP + SI]
-PUSH AX
+MOV BX, [BP + SI]
 MOV AX, 1
-POP BX
 SUB BX, AX
 MOV AX, BX
 POP SI
@@ -206,15 +188,11 @@ PUSH 0
 PUSH 0
 ;int a,b,i
 MOV SI, -2
-PUSH SI
 MOV AX, 1
-POP SI
 MOV [BP + SI], AX
 ;a=1
 MOV SI, -4
-PUSH SI
 MOV AX, 2
-POP SI
 MOV [BP + SI], AX
 ;b=2
 MOV SI, -2
@@ -239,17 +217,13 @@ MOV AX, [BP - 2]
 ;println(a)
 CALL PRINT_INT
 MOV SI, -6
-PUSH SI
 MOV AX, 0
-POP SI
 MOV [BP + SI], AX
 ;i=0
 label14:
 MOV SI, -6
-MOV AX, [BP + SI]
-PUSH AX
+MOV BX, [BP + SI]
 MOV AX, 4
-POP BX
 CMP BX, AX
 JL label18
 MOV AX, 0
@@ -270,17 +244,13 @@ JMP label14
 label16:
 ;for(i=0;i<4;i++)
 MOV SI, -2
-PUSH SI
 MOV AX, 3
-POP SI
 MOV [BP + SI], AX
 ;a=3
 label20:
 MOV SI, -2
-MOV AX, [BP + SI]
-PUSH AX
+MOV BX, [BP + SI]
 MOV AX, 0
-POP BX
 CMP BX, AX
 JG label22
 MOV AX, 0
