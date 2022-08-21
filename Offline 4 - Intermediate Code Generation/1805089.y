@@ -40,6 +40,9 @@ vector<string> labels;
 vector<int> offsets;
 string currFunc;
 
+string lbl1;
+string lbl2;
+
 SymbolTable *symbolTable = new SymbolTable(7);
 
 void printErr(string message);
@@ -166,7 +169,8 @@ void optimize(){
 				if(((j - 1)[0].rfind("MOV SI", 0) == 0) || 
 					((j - 1)[0].rfind("ADD SI", 0) == 0) ||
 					((j - 1)[0].rfind("SUB SI", 0) == 0) ||
-					((j - 1)[0].rfind("LEA SI", 0) == 0)) {
+					((j - 1)[0].rfind("LEA SI", 0) == 0) ||
+					((j - 1)[0].rfind("CALL", 0) == 0)) {
 						break;
 					}
 				else if((j - 1)[0] == "PUSH SI"){
@@ -183,6 +187,11 @@ void optimize(){
 				code.erase(i - 1);
             }
         }
+		else if((i - 1)[0].rfind("ADD", 0) == 0 || (i - 1)[0].rfind("SUB", 0) == 0){
+			if((i - 1)[0][(i - 1)[0].size() - 1] == '0'){
+				code.erase(i - 1);
+			}
+		}
 		if(oin.eof()){
 			break;
 		}
@@ -367,6 +376,7 @@ func_definition :
 				logOut << ".CODE\n\n";
 				isCode = true;
 			}
+			logOut << ";" <<$1[0] + " " + $2->getName() + "(" + makeParamListString($4) + ")\n"; 
 			retType = $1[0];
 			SymbolInfo* id = symbolTable->lookup($2->getName());
 			if(id == nullptr){
@@ -510,6 +520,8 @@ func_definition :
 				logOut << ".CODE\n\n";
 				isCode = true;
 			}
+
+			logOut << ";" << $1[0] + " " + $2->getName() + "()\n";
 
 			retType = $1[0];
 			SymbolInfo* id = symbolTable->lookup($2->getName());
@@ -1127,11 +1139,13 @@ variable :
 					else{
 						if(id->isGlobal){
 							logOut << "LEA SI, " << $1->getName() << endl;
+							logOut << "SHL AX, 1\n";
 							logOut << "ADD SI, AX\n";
 							isGlobal = true;
 						}
 						else {
 							logOut << "MOV SI, " << -1 * id->getOffset() << endl;
+							logOut << "SHL AX, 1\n";
 							logOut << "SUB SI, AX\n";
 							isGlobal = false;
 						}
@@ -1193,17 +1207,24 @@ logic_expression :
 			//logOut << "Line " << yylineno << ": logic_expression : rel_expression\n\n";
 			//logOut << $$->getName() << "\n\n";
 		}
-		| rel_expression LOGICOP {logOut << "PUSH AX\n";} rel_expression {
-
-			logOut << "POP BX\n";
-			string lbl1 = makeLabel();
-			string lbl2 = makeLabel();
+		| rel_expression LOGICOP {
+			lbl1 = makeLabel();
+			lbl2 = makeLabel();
 			if($2[0] == "&&"){
-				logOut << "CMP BX, 0\nJE " << lbl1 << "\nCMP AX, 0\nJE " << lbl1 << "\nMOV AX, 1\n";
+				logOut << "CMP AX, 0\nJE " << lbl1 << endl;
+			}
+			else {
+				logOut << "CMP AX, 0\nJNE " << lbl1 << endl;
+			}
+		} 
+		rel_expression {
+
+			if($2[0] == "&&"){
+				logOut << "CMP AX, 0\nJE " << lbl1 << "\nMOV AX, 1\n";
 				logOut << "JMP " << lbl2 << "\n" << lbl1 << ":\nMOV AX, 0\n" << lbl2 << ":\n";
 			}
 			else {
-				logOut << "CMP BX, 0\nJNE " << lbl1 << "\nCMP AX, 0\nJNE " << lbl1 << "\nMOV AX, 0\n";
+				logOut << "CMP AX, 0\nJNE " << lbl1 << "\nMOV AX, 0\n";
 				logOut << "JMP " << lbl2 << "\n" << lbl1 << ":\nMOV AX, 1\n" << lbl2 << ":\n";
 			}
 
