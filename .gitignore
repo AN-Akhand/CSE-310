@@ -7,3 +7,5 @@ y.tab.c
 *.txt
 in.c
 1805089.asm
+test.cpp
+*.asm

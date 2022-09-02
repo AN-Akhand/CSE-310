@@ -149,7 +149,7 @@ string makeStatementsString(vector<SymbolInfo*>* v){
 
 void optimize(){
 	ifstream oin;
-	oin.open("1805089.asm");
+	oin.open("code.asm");
 	string s;
 	vector<string> code;
 	getline(oin, s);
@@ -192,6 +192,13 @@ void optimize(){
 				code.erase(i - 1);
 			}
 		}
+		else if((i - 1)[0].rfind("MOV", 0) == 0 && (i - 2)[0].rfind("MOV", 0) == 0){ 
+			auto temp1 = tokenize((i - 1)[0], ",");
+			auto temp2 = tokenize((i - 2)[0], ",");
+			if(temp1.at(0) == "MOV" + temp2.at(1) && "MOV" + temp1.at(1) == temp2.at(0)){
+				code.erase(i - 1);
+			}
+		}
 		if(oin.eof()){
 			break;
 		}
@@ -201,7 +208,7 @@ void optimize(){
             break;
         }
     }
-    ofstream output_file("./1805089_optimized.asm");
+    ofstream output_file("./optimized_code.asm");
     ostream_iterator<string> output_iterator(output_file, "\n");
     copy(code.begin(), code.end(), output_iterator);
 }
@@ -1626,7 +1633,7 @@ int main(int argc,char *argv[]) {
 		exit(1);
 	}
 
-	logOut.open("1805089.asm");
+	logOut.open("code.asm");
 	errOut.open("1805089_error.txt");
 
 	yyin=fp;
@@ -1636,7 +1643,7 @@ int main(int argc,char *argv[]) {
 	logOut.close();
 
 	if(isErrEnd){
-		fopen("1805089.asm", "w");
+		fopen("code.asm", "w");
 	}
 
 	optimize();
