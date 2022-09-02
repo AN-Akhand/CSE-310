@@ -1,11 +1,13 @@
-int baar(int a, int b, int c){
-    int d;
-    d = 10;
-    printf(a);
-    printf(b);
-    printf(d);
-}
+int a[10]; 
+
 int main(){
-    baar(1, 2, 3*2);
-    baar(3, 2, 1);
+    int i;
+    int b;
+    for(i = 0; i < 10; i++){
+        a[i] = i;
+    }
+    for(i = 0; i < 10; i++){
+        b = a[i];
+        printf(b);
+    }
 }

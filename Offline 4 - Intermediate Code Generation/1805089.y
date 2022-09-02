@@ -26,6 +26,7 @@ ofstream logOut;
 int offset = 2;
 int labelCount = 0;
 bool isGlobal = false;
+bool isGlobalAssign = false;
 bool isCode = false;
 
 bool isErr = false;
@@ -1171,15 +1172,21 @@ expression :
 			$$ = $1;
 			logOut << ";" << $$->getName() << endl;
 		}
-		| variable {logOut << "PUSH SI\n";} ASSIGNOP logic_expression {
+		| variable {
+			logOut << "PUSH SI\n";
+			if(isGlobal){
+				isGlobalAssign = true;
+			}
+		} ASSIGNOP logic_expression {
 
 			logOut << "POP SI\n";
-			if(isGlobal)
+			if(isGlobalAssign)
 				logOut << "MOV [SI], AX\n";
 			else 
 				logOut << "MOV [BP + SI], AX\n";
 			//logOut << "Line " << yylineno << ": expression : variable ASSIGNOP logic_expression\n\n";
 
+			isGlobalAssign = false;
 
 			string left = $1->getIdType();
 			string right = $4->getIdType();
